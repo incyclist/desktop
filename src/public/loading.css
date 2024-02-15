@@ -1,0 +1,174 @@
+body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding:0;
+  margin:0;
+  color: #2c3e50;
+  background-color: #cccccc;
+  font-family: "Lato","Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-weight: 400;
+  z-index: 1;
+}
+
+
+.img {
+  position: absolute;
+  top: 5vh;
+  left: 5vw;
+  width: 90vw;
+  height: 60vh;
+  padding:0;
+  margin:0;
+  background-image: url('./loading.jpg');
+  background-size: cover;
+}
+
+.wrap {
+  position: absolute;
+  top: 70vh;
+  left: 0vw;
+  width: 100%;
+  height: 30vh;
+  text-align: center;
+  padding:0;
+  margin:0;
+}
+
+.row {
+  position: relative;
+  top: 5vh;
+}
+
+.h2 {
+  font-size: 24px;
+}
+
+.text {
+  color: #2c3e50;
+  margin-left: 5px;
+}
+
+.version {
+  color: #2c3e50;
+  margin: 0;
+  padding: 0;
+  font-size: 2vh;
+  text-align: left;
+  position: absolute;
+  width: 98vh;
+  height: 2vh;
+  left: 1vh;
+  top: 97vh;
+  z-index: 20;
+}
+
+
+.error {
+  position: absolute;
+  font-size: 15px;
+  font-weight: bold;
+  top: 10vh;
+  width: 100%;
+  text-align: center;
+  color: #000000;
+  display: inline-block;
+}
+
+.btn {
+  position: relative;
+  background-color: #dd9933; 
+  border-color: #2c3e50;
+  position: relative;
+  margin: auto;
+  font-weight: normal;
+  text-align: center;
+  vertical-align: middle;
+  -ms-touch-action: manipulation;
+  touch-action: manipulation;
+  cursor: pointer;
+  background-image: none;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  padding: 1.1vh 1vw;
+  border-radius: 4px;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  color: white;
+  
+}
+.btn:hover {
+  background-color: #8dc100;
+} 
+
+
+.buttons {
+  position: absolute;
+  top: 70vh;
+  width: 100%;
+  text-align: center;
+  display: inline-block;
+}
+
+
+.bounceball {
+  position: relative;
+  display: inline-block;
+  height: 37px;
+  width: 15px;
+}
+
+.bounceball:before {
+  position: absolute;
+  content: '';
+  display: block;
+  top: 0;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background-color: #2c3e50;
+  -webkit-transform-origin: 50%;
+          transform-origin: 50%;
+  -webkit-animation: bounce 500ms alternate infinite ease;
+          animation: bounce 500ms alternate infinite ease;
+}
+
+@-webkit-keyframes bounce {
+  0% {
+    top: 30px;
+    height: 5px;
+    border-radius: 60px 60px 20px 20px;
+    -webkit-transform: scaleX(2);
+            transform: scaleX(2);
+  }
+  35% {
+    height: 15px;
+    border-radius: 50%;
+    -webkit-transform: scaleX(1);
+            transform: scaleX(1);
+  }
+  100% {
+    top: 0;
+  }
+}
+
+@keyframes bounce {
+  0% {
+    top: 30px;
+    height: 5px;
+    border-radius: 60px 60px 20px 20px;
+    -webkit-transform: scaleX(2);
+            transform: scaleX(2);
+  }
+  35% {
+    height: 15px;
+    border-radius: 50%;
+    -webkit-transform: scaleX(1);
+            transform: scaleX(1);
+  }
+  100% {
+    top: 0;
+  }
+}

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8"
+		http-equiv="Content-Security-Policy"
+   	      content="default-src 'self'; img-src 'self'; child-src 'none';" />
+	 >
+    <title>Incyclist</title>
+	 <link rel="stylesheet" type="text/css" href="./loading.css">
+  </head>
+  <body>
+
+	<div class="img">
+	</div>
+
+	<div class="wrap">
+		<div class="loading">
+			<div class="bounceball"></div>
+			<div id="loadingText" class="text">loading ...</div>
+		</div>
+		<div class="row">
+			<button id='skipBtn' class="btn" hidden=true onclick="window.api.skipInstallUpdate()">Install Later</button>
+		</div>		
+	</div>
+	<div id="versionText" class="version">version 1.2.3</div>
+
+</body>
+</html>

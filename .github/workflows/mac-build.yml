@@ -1,0 +1,55 @@
+# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+
+name: Mac Build
+
+on:
+  release:
+    types: [created] 
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: macos-latest
+
+    strategy:
+      matrix:
+        node-version: [18]
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Retrieve the secret and write it to a file
+      env:
+        SECRET_FILE: ${{ secrets.SECRET_FILE }}
+      run: |
+        echo $SECRET_FILE > ./src/secrets.json
+
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.10' 
+        
+    - name: Retrieve the settings and write them to a file
+      env:
+        SETTINGS_FILE: ${{ secrets.SETTINGS_FILE }}
+      run: |
+        echo $SETTINGS_FILE > ./config/settings.json
+        cat ./config/settings.json
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+    - run: |
+       npm install       
+       npm i --save-dev appdmg
+       npm run package-mac
+       npm run installer-mac
+       ls ./release/installer
+    
+    - uses: actions/upload-artifact@v2
+      with:
+        name: incyclist.dmg
+        path: ./release/installer
+

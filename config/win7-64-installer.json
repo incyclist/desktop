@@ -1,0 +1,10 @@
+{
+  "src": "./release/incyclist/incyclist-win32-x64",
+  "dest": "./installer/win64",
+  "copyright": "Guido Doumen",
+  "authors": ["Guido Doumen", "Jeroen Doumen"],
+  "homepage": "https://incyclist.com",
+  "noMsi": true,
+  "remoteReleases" : "https://updates.incyclist.com/download/app/latest/win64",
+  "debug":true
+}

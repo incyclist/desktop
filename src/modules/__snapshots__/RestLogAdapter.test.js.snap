@@ -1,0 +1,101 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Constructor full set of parameters 1`] = `"http://localhost:3000"`;
+
+exports[`Constructor no parameters 1`] = `
+RestLogAdapter {
+  "cacheDir": undefined,
+  "headers": undefined,
+  "inMemoryCache": Array [],
+  "iv": "fun",
+  "logger": EventLogger {
+    "config": Object {
+      "name": "RestLogAdapter",
+      "parent": undefined,
+    },
+    "context": Context {
+      "data": Object {},
+      "name": "RestLogAdapter",
+      "parent": Context {
+        "data": Object {},
+        "name": "__global",
+        "parent": undefined,
+      },
+    },
+    "events": Array [],
+    "isBusy": false,
+    "isReady": true,
+    "parent": EventLogger {
+      "config": Object {
+        "name": "RestLogAdapter",
+        "parent": undefined,
+      },
+      "context": Context {
+        "data": Object {},
+        "name": "RestLogAdapter",
+        "parent": Context {
+          "data": Object {},
+          "name": "__global",
+          "parent": undefined,
+        },
+      },
+      "events": Array [],
+      "isBusy": false,
+      "isReady": true,
+      "parent": EventLogger {
+        "config": Object {
+          "name": "__global",
+          "parent": undefined,
+        },
+        "context": Context {
+          "data": Object {},
+          "name": "__global",
+          "parent": undefined,
+        },
+        "events": Array [],
+        "isBusy": false,
+        "isReady": true,
+        "parent": undefined,
+      },
+    },
+  },
+  "props": Object {},
+  "sendBusy": false,
+  "sendInterval": 120000,
+  "url": undefined,
+}
+`;
+
+exports[`log first call 1`] = `
+Array [
+  Object {
+    "context": "test",
+    "event": Object {
+      "a": 1,
+    },
+  },
+]
+`;
+
+exports[`log multiple calls 1`] = `
+Array [
+  Object {
+    "context": "test",
+    "event": Object {
+      "a": 1,
+    },
+  },
+  Object {
+    "context": "test",
+    "event": Object {
+      "a": 2,
+    },
+  },
+  Object {
+    "context": "test",
+    "event": Object {
+      "a": 3,
+    },
+  },
+]
+`;

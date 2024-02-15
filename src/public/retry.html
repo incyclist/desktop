@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Incyclist</title>
+	 <link rel="stylesheet" type="text/css" href="./loading.css">
+  </head>
+  <body>
+		<script>
+			var ipc = require('electron').ipcRenderer;
+			
+			function sendReload() {
+				ipc.send('retry-page-event', 'reload')
+			}
+			function sendClose() {
+				ipc.send('retry-page-event', 'close')
+			}	
+		</script>
+		<div class="error"><h2>Failed Loading</h2></div>
+		<div class="buttons">
+			<button class="btn" onclick="sendReload()">Retry</button>
+			<button class="btn" onclick="sendClose()">Close</button>	
+		</div>
+	</div>
+  </body>
+</html>

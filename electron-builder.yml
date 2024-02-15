@@ -1,0 +1,27 @@
+appId: com.incyclist.Incyclist
+directories:
+  output: installer/linux
+  buildResources: build
+
+files: 
+  - "build/"
+  - "src/"
+  - "node_modules/"
+  - "package.json"
+npmRebuild: false
+# directories:
+#  output: installer/linux
+linux:
+  #icon: ./src/public/incyclist.ico
+  category: Game
+  maintainer: incyclist@doumen-laumen.de  
+    
+    
+  target: 
+   - AppImage
+   - snap
+
+publish:
+  provider: generic
+  url: https://updates.incyclist.com/download/app/latest/linux/x64
+

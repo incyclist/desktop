@@ -1,0 +1,16 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`unzip positive 1`] = `
+Array [
+  "favicon.ico",
+  "images/stop.svg",
+  "images/u-turn.svg",
+  "index.html",
+  "static/css/2.a08beec1.chunk.css",
+  "static/css/2.a08beec1.chunk.css.map",
+  "static/css/main.af8ccdc5.chunk.css",
+  "static/css/main.af8ccdc5.chunk.css.map",
+  "static/js/main.975c9892.chunk.js",
+  "static/js/runtime~main.9e52baa2.js",
+]
+`;

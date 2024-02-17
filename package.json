@@ -99,7 +99,7 @@
     "electron-builder": "^24.9.1",
     "electron-installer-dmg": "^3.0.0",
     "electron-installer-windows": "^3.0.0",
-    "electron-packager": "^16.0.0",
+    "electron-packager": "^17.1.2",
     "fs-extra": "^11.1.1",
     "jest": "^29.6.2",
     "lnk": "^1.1.0",

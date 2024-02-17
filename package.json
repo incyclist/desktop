@@ -1,7 +1,7 @@
 {
   "name": "incyclist",
   "productName": "Incyclist",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "copyright": "Guido Doumen, Jeroen Doumen",
   "description": "Incyclist Desktop App",
   "main": "src/main.js",

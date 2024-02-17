@@ -108,6 +108,7 @@ class FileSystemSupport extends Feature{
         ipcHandleSync('fs-existsSync',fs.existsSync,ipcMain)
         ipcHandleSync('fs-checkDir',checkDir,ipcMain)
         ipcHandle('fs-unlink',promiseFs.unlink,ipcMain)
+        ipcHandle('fs-readdir',promiseFs.readdir,ipcMain)
 
         ipcHandleSync('fs-createWriteStream', this.createWriteStream.bind(this), ipcMain )
         ipcHandleNoResponse('fs-ws-write', this.writeStreamWrite.bind(this), ipcMain)
@@ -147,7 +148,8 @@ class FileSystemSupport extends Feature{
         spec.fs.appendFile              = ipcCall('fs-append-file',ipcRenderer) 
         spec.fs.existsSync              = ipcCallSync('fs-existsSync',ipcRenderer) 
         spec.fs.checkDir                = ipcCallSync('fs-checkDir',ipcRenderer) 
-        spec.fs.unlink                  = ipcCall('fs-unlink',ipcRenderer)        
+        spec.fs.unlink                  = ipcCall('fs-unlink',ipcRenderer) 
+        spec.fs.readdir                 = ipcCall('fs-readdir',ipcRenderer) 
 
         spec.fs.createWriteStream       = this.createIpcStream.bind(this)
 
@@ -168,7 +170,7 @@ class FileSystemSupport extends Feature{
         spec.path.parse               = ipcCallSync('fs-path-parse',ipcRenderer) 
         spec.path.join                = ipcCallSync('fs-path-join',ipcRenderer) 
         spec.registerFeatures( [
-            'fileSystem','fileSystem.stream','fileSystem.unlink'
+            'fileSystem','fileSystem.stream','fileSystem.unlink','fileSystem.readdir'
         ] )
 
     }

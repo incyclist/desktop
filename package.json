@@ -71,7 +71,7 @@
     ]
   },
   "dependencies": {
-    "@abandonware/noble": "^1.9.2-15",
+    "@abandonware/noble": "^1.9.2-24",
     "@serialport/bindings-cpp": "^10.8.0",
     "axios": "^0.21.1",
     "chrome-native-messaging": "^0.2.0",

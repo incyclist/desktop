@@ -73,7 +73,7 @@
   "dependencies": {
     "@abandonware/noble": "^1.9.2-24",
     "@serialport/bindings-cpp": "^10.8.0",
-    "axios": "^0.21.1",
+    "axios": "^1.6.7",
     "chrome-native-messaging": "^0.2.0",
     "electron-squirrel-startup": "^1.0.0",
     "electron-unhandled": "^3.0.2",

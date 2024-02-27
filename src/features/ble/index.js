@@ -7,10 +7,10 @@ const { getAppDirectory } = require("../../utils");
 const { EventLogger } = require('gd-eventlog');
 const EventEmitter = require("events");
 const { ipcMain } = require("electron");
-const Peripheral = require("@abandonware/noble/lib/peripheral");
-const Characteristic = require("@abandonware/noble/lib/characteristic");
-const Service = require("@abandonware/noble/lib/service");
-const Noble = require('@abandonware/noble/lib/noble');
+const Peripheral = require("@stoprocent/noble/lib/peripheral");
+const Characteristic = require("@stoprocent/noble/lib/characteristic");
+const Service = require("@stoprocent/noble/lib/service");
+const Noble = require('@stoprocent/noble/lib/noble');
 
 
 const clone = (obj) => { 
@@ -91,7 +91,7 @@ class BLEFeature extends Feature {
                 this.ble = null;
             }
             else {
-                const defaultBinding = require('@abandonware/noble/lib/resolve-bindings')();
+                const defaultBinding = require('@stoprocent/noble/lib/resolve-bindings')();
                 this.ble = new Noble(defaultBinding);
             }
             

@@ -15,16 +15,16 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [14.16.1]
+        node-version: [20]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Retrieve the secret and write it to a file
       env:
         SECRET_FILE: ${{ secrets.SECRET_FILE }}
       run: |
-        $env.SECRET_FILE | Out-File .\app\secrets.json
+        $env.SECRET_FILE | Out-File .\src\secrets.json
         
 
     - name: Retrieve the settings and write them to a file
@@ -35,7 +35,7 @@ jobs:
         dir .\config
 
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         
@@ -44,13 +44,11 @@ jobs:
     - run: |
        mkdir .\installer       
        npm install       
-       npm uninstall usb incyclist-ant-plus @abandonware/noble @abandonware/bluetooth-hci-socket
        npm run rebuild
-       npm install usb incyclist-ant-plus @abandonware/noble
        npm run package-win64
        npm run installer-win7-64
     
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         name: package
         path: ./installer/win64/

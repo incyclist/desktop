@@ -15,18 +15,18 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18]
+        node-version: [20]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Retrieve the secret and write it to a file
       env:
         SECRET_FILE: ${{ secrets.SECRET_FILE }}
       run: |
         echo $SECRET_FILE > ./src/secrets.json
 
-    - uses: actions/setup-python@v4
+    - uses: actions/setup-python@v5
       with:
         python-version: '3.10' 
         
@@ -38,7 +38,7 @@ jobs:
         cat ./config/settings.json
 
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
     - run: |
@@ -48,7 +48,7 @@ jobs:
        npm run installer-mac
        ls ./release/installer
     
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v4
       with:
         name: incyclist.dmg
         path: ./release/installer

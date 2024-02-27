@@ -24,7 +24,7 @@ jobs:
       env:
         SECRET_FILE: ${{ secrets.SECRET_FILE }}
       run: |
-        $env.SECRET_FILE | Out-File .\app\secrets.json
+        $env.SECRET_FILE | Out-File .\src\secrets.json
         
 
     - name: Retrieve the settings and write them to a file

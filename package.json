@@ -76,7 +76,7 @@
     "axios": "^0.21.1",
     "chrome-native-messaging": "^0.2.0",
     "electron-squirrel-startup": "^1.0.0",
-    "electron-unhandled": "^3.0.2",
+    "electron-unhandled": "^4.0.1",
     "electron-updater": "^6.1.8",
     "fluent-ffmpeg": "^2.1.2",
     "gd-eventlog": "^0.1.24",

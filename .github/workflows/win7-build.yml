@@ -44,9 +44,7 @@ jobs:
     - run: |
        mkdir .\installer       
        npm install       
-       npm uninstall usb incyclist-ant-plus @abandonware/noble @abandonware/bluetooth-hci-socket
        npm run rebuild
-       npm install usb incyclist-ant-plus @abandonware/noble
        npm run package-win64
        npm run installer-win7-64
     

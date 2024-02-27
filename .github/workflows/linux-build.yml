@@ -18,7 +18,7 @@ jobs:
         node-version: [20]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Retrieve the secret and write it to a file
       env:
         SECRET_FILE: ${{ secrets.SECRET_FILE }}
@@ -34,21 +34,21 @@ jobs:
 
 
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
     - run: |
        npm install       
        npm run installer-linux64
     
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         name: AppImage
         path: |
           ./dist/*.AppImage
           ./dist/latest-linux.yml
 
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         name: snap
         path: ./dist/*.snap

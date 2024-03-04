@@ -96,7 +96,7 @@
     "axios-mock-adapter": "^1.18.1",
     "bindings": "^1.5.0",
     "electron": "^29.0.1",
-    "electron-builder": "^24.9.1",
+    "electron-builder": "^24.13.3",
     "electron-installer-dmg": "^3.0.0",
     "electron-installer-windows": "^3.0.0",
     "electron-packager": "^16.0.0",

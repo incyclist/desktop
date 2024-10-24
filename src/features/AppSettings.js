@@ -533,8 +533,8 @@ class AppSettings {
             }
     
         }
-        catch(error) {
-            this.logger.logEvent( {message:'error',fn:'merge', args:{base,data,depth}, error})
+        catch(err) {
+            this.logger.logEvent( {message:'error',fn:'merge', args:{base,data,depth}, error:err.message})
         }
     }
 

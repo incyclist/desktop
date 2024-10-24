@@ -73,7 +73,7 @@
   "dependencies": {
     "@serialport/bindings-cpp": "^10.8.0",
     "@stoprocent/noble": "^1.13.6",
-    "axios": "^0.21.1",
+    "axios": "^1.7.7",
     "chrome-native-messaging": "^0.2.0",
     "electron-squirrel-startup": "^1.0.0",
     "electron-unhandled": "^4.0.1",
@@ -83,19 +83,18 @@
     "incyclist-ant-plus": "^0.3.1",
     "incyclist-devices": "^2.2.1",
     "mp4frag": "^0.7.0",
-    "mqtt": "^5.3.5",
+    "mqtt": "^5.10.1",
     "request": "^2.88.2",
     "serialport": "^10.5.0",
     "usb": "^2.5.2",
-    "uuid": "^9.0.1",
-    "yauzl": "^2.10.0"
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0",
     "@mapbox/node-pre-gyp": "^1.0.11",
-    "axios-mock-adapter": "^1.18.1",
+    "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",
-    "electron": "^29.0.1",
+    "electron": "^33.0.2",
     "electron-builder": "^24.9.1",
     "electron-installer-dmg": "^3.0.0",
     "electron-installer-windows": "^3.0.0",

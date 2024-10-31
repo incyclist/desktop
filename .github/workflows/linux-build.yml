@@ -51,8 +51,8 @@ jobs:
       with:
         name: AppImage
         path: |
-          ./dist/*.AppImage
-          ./dist/latest-linux.yml
+          ./release/installer/linux/x64/*.AppImage
+          ./release/installer/linux/x64/latest-linux.yml
 
     - uses: actions/upload-artifact@v4
       with:

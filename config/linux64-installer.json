@@ -1,0 +1,29 @@
+{
+    "build" : {
+        "publish": {
+        "provider": "generic",
+        "url": "https://updates.incyclist.com/download/app/latest/linux/x64"
+        },
+        "appId": "incyclist",
+        "productName": "Incyclist",
+        "nodeGypRebuild": false,
+        "directories": {
+        "app": "./",
+        "buildResources": "./res",
+        "output": "../installer/linux/x64"
+        },
+        "linux": {
+        "category": "Games",
+        "maintainer": "Guido Doumen"
+        },
+        "extraFiles": [
+        {
+            "from": "bin/${os}",
+            "to": "Resources/bin",
+            "filter": [
+            "**/*"
+            ]
+        }
+        ]
+    }
+}

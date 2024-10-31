@@ -46,7 +46,10 @@ class IncyclistApp
             this.logger.logEvent( {message:'2nd Instance detected - terminating'})
             app.quit()
         } else {
+            this.logger.logEvent( {message:'got the instance lock'})
+
             app.on('second-instance', () => {
+                this.logger.logEvent( {message:'2nd Instance launched '})
                 // Someone tried to run a second instance, we should focus our window.
                 this.windowManager.focusActive()
             })
@@ -100,7 +103,8 @@ class IncyclistApp
 
         // Quit when all windows are closed.
         app.on('window-all-closed', ()=> this.onWindowAllClosed())
-        app.on('activate', () => this.onActive());
+        app.on('activate', (e,hasVisibleWindows) => this.onActive(hasVisibleWindows));
+
         app.on('before-quit', (e)=> this.onBeforeQuit(e))
         app.on('will-quit', (e) => this.onWillQuit(e))
         app.on('session-created', (_event,session) => this.onSessionCreated(session) )
@@ -326,12 +330,13 @@ class IncyclistApp
     }  
 
 
-    onActive() {
+    onActive(hasVisibleWindows) {
         this.logger.logEvent({message:'app event',event:'active'})
 
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
-        this.windowManager.createMainWindow()
+        if (!hasVisibleWindows)
+            this.windowManager.createMainWindow()
     
     }
 

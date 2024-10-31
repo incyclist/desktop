@@ -10,7 +10,7 @@
         "directories": {
         "app": "./",
         "buildResources": "./res",
-        "output": "../installer/linux/x64"
+        "output": "../../installer/linux/x64"
         },
         "linux": {
         "category": "Games",
@@ -18,7 +18,7 @@
         },
         "extraFiles": [
         {
-            "from": "bin/${os}",
+            "from": "bin/linux",
             "to": "Resources/bin",
             "filter": [
             "**/*"

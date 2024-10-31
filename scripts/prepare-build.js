@@ -135,19 +135,22 @@ if (os.platform()==='win32') {
 }
 else if (os.platform()==='darwin') {
     console.log('copying node modules  ...')
-
     try { fs.cpSync(path.join(baseDir,'./node_modules'),path.join(buildDir,'./node_modules'), {recursive: true}) } catch {}
     console.log('... done')
     try { fs.mkdirSync(path.join(buildDir,'./bin'))} catch {}
-    if (fs.existsSync(path.join(baseDir,`./bin/mac-${os.arch}`)))
-        try { fs.symlinkSync(path.join(baseDir,`./bin/mac-${os.arch}`),path.join(buildDir,`./bin/mac-${os.arch}`)) } catch {}
+    if (fs.existsSync(path.join(baseDir,`./bin/mac-${os.arch()}`)))
+        try { fs.symlinkSync(path.join(baseDir,`./bin/mac-${os.arch()}`),path.join(buildDir,`./bin/mac-${os.arch()}`)) } catch {}
     fs.symlinkSync(path.join(baseDir,'./src'),path.join(buildDir,'./src'))
     fs.symlinkSync(path.join(baseDir,'./scripts'),path.join(buildDir,'./scripts'))    
 
 }
 else {
-    fs.symlinkSync(path.join(baseDir,'./node_modules'),path.join(buildDir,'./node_modules'))
-    fs.symlinkSync(path.join(baseDir,'./bin'),path.join(buildDir,'./bin'))
+    console.log('copying node modules  ...')
+    try { fs.cpSync(path.join(baseDir,'./node_modules'),path.join(buildDir,'./node_modules'), {recursive: true}) } catch {}
+    console.log('... done')
+    if (fs.existsSync(path.join(baseDir,`./bin/${os.platform()}-${os.arch()}`)))
+        try { fs.symlinkSync(path.join(baseDir,`./bin/${os.platform()}`),path.join(buildDir,`./bin/${os.platform()}`)) } catch {}
+    try { fs.mkdirSync(path.join(buildDir,'./bin'))} catch {}
     fs.symlinkSync(path.join(baseDir,'./src'),path.join(buildDir,'./src'))
     fs.symlinkSync(path.join(baseDir,'./scripts'),path.join(buildDir,'./scripts'))    
 }

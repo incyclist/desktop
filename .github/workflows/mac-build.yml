@@ -46,10 +46,10 @@ jobs:
        npm i --save-dev appdmg
        npm run package-mac
        npm run installer-mac
-       ls ./release/installer
+       ls ./installer/mac
     
     - uses: actions/upload-artifact@v4
       with:
         name: incyclist.dmg
-        path: ./release/installer
+        path: ./installer/mac
 

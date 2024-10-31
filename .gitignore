@@ -27,3 +27,4 @@ logfile.json
 app/.settings/
 bin/*/ergoapp.node
 nohup.out
+config/setttings.json

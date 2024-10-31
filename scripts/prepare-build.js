@@ -16,7 +16,7 @@ let config = process.argv[2]??'../package.json'
 if (config.startsWith('./')) config='.'+config
 
 
-const {build} = require(config)??{}
+const {build={}} = require(config)??{}
 
 console.log( 'config:', build)
 console.log('Platform:', os.platform(),build[os.platform()])
@@ -27,12 +27,18 @@ const appBuildDir = path.join(buildDir,buildResources)
 
 function cleanupDirectory(dir) {
 
-    console.log('cleanup build dir')
-    const unlink = (l) => { try {fs.unlinkSync(l)} catch (err){console.log(err)}}
+    const unlink = (l) => { try {fs.unlinkSync(l)} catch {}}
+    const rm = (l) => { try {fs.rmSync(dir,{recursive:true});} catch{} }
 
     // clean build directory
-    unlink(path.join(buildDir,'./node_modules'))
-    unlink(path.join(buildDir,'./bin'))
+    if (os.platform()==='darwin') {
+        rm(path.join(buildDir,'./bin'))
+        rm(path.join(buildDir,'./node_modules'))
+    }
+    else  {
+        unlink(path.join(buildDir,'./bin'))
+        unlink(path.join(buildDir,'./node_modules'))
+    }
     unlink(path.join(buildDir,'./src'))
     unlink(path.join(buildDir,'./scripts'))
     
@@ -127,13 +133,25 @@ if (os.platform()==='win32') {
     lnk.sync(path.join(baseDir,'./src'),buildDir)
     lnk.sync(path.join(baseDir,'./scripts'),buildDir)
 }
+else if (os.platform()==='darwin') {
+    console.log('copying node modules  ...')
+
+    try { fs.cpSync(path.join(baseDir,'./node_modules'),path.join(buildDir,'./node_modules'), {recursive: true}) } catch {}
+    console.log('... done')
+    try { fs.mkdirSync(path.join(buildDir,'./bin'))} catch {}
+    if (fs.existsSync(path.join(baseDir,`./bin/mac-${os.arch}`)))
+        try { fs.symlinkSync(path.join(baseDir,`./bin/mac-${os.arch}`),path.join(buildDir,`./bin/mac-${os.arch}`)) } catch {}
+    fs.symlinkSync(path.join(baseDir,'./src'),path.join(buildDir,'./src'))
+    fs.symlinkSync(path.join(baseDir,'./scripts'),path.join(buildDir,'./scripts'))    
+
+}
 else {
     fs.symlinkSync(path.join(baseDir,'./node_modules'),path.join(buildDir,'./node_modules'))
     fs.symlinkSync(path.join(baseDir,'./bin'),path.join(buildDir,'./bin'))
     fs.symlinkSync(path.join(baseDir,'./src'),path.join(buildDir,'./src'))
-    fs.symlinkSync(path.join(baseDir,'./scripts'),path.join(buildDir,'./scripts'))
-    
+    fs.symlinkSync(path.join(baseDir,'./scripts'),path.join(buildDir,'./scripts'))    
 }
+
 
 if (!package_json.build) {
     package_json.build = build

@@ -1,8 +1,10 @@
-const {ipcMain,dialog} = require('electron')
+const {ipcMain,dialog,webUtils} = require('electron')
 
 const path = require('path');
 const { ipcCall,ipcResponse } = require('./utils');
+const { electron } = require('process');
 const ipc = ipcMain;
+
 
 class FileSelectionSupport {
   constructor(props = {}) {
@@ -90,8 +92,15 @@ class FileSelectionSupport {
       return info
     }
 
+    spec.getPathForFile = (webfile) =>{
+
+      const path = webUtils.getPathForFile(webfile) 
+      webfile.path = path
+      return webfile
+    }
+
     spec.registerFeatures( [
-      'FileSelection.openFileDialog', 'FileSelection.parsePath'
+      'FileSelection.openFileDialog', 'FileSelection.parsePath', 'File.path'
   ] )
   }
 }

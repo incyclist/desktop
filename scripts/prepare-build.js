@@ -72,7 +72,7 @@ async function copyFromServer(url) {
     axios.defaults.headers.common = { "X-uuid":"update-react","X-arch":os.arch(), "X-platform":os.platform(), "user-agent": `update-react/${version} (${os.platform()};${os.arch()};${os.release()})`};
 
     console.log('checking version ...')
-    let response = await axios.get(`${url}/api/v1/apps/${name}/${version}?uuid=update-react`)    
+    let response = await axios.get(`${url}/api/v1/apps/${name}/${version}?uuid=update-react`)  ?? {}
     let {reactVersion} = response?.data
 
     if (!reactVersion?.length) {

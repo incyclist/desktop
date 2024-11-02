@@ -83,9 +83,6 @@ class FileSelectionSupport {
 
 
   static registerRenderer( spec, ipcRenderer) {
-    const { contextBridge, webUtils } = require('electron')
-    console.log('~~~ WEBUTILS', webUtils)
-    
 
     spec.openFileDialog = ipcCall('open-file-dialog',ipcRenderer,{debug:process.env.DEBUG}) 
 

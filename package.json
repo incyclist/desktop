@@ -16,9 +16,10 @@
     "package-win64": "node ./scripts/win-package ./config/win64-package.json",
     "package-win64-dev": "node ./scripts/win-package ./config/win64-package-dev.json",
     "installer-mac": " cd ./release/darwin && electron-installer-dmg ./incyclist-darwin-x64/incyclist.app --out=../../installer/mac incyclist",
-    "installer-win64": "node ./scripts/win-installer.js ./config/win64-installer.json",
+    "installer-win64": "node ./scripts/win-installer.js ./config/win64-installer.json && npm run sign-win64",
     "installer-win32": "node ./scripts/win-installer.js ./config/win32-installer.json",
     "installer-linux64": "npm run prepare-build ./config/linux64-installer.json && cd ./release/linux && npm run build-linux",
+    "sign-win64": "node ./scripts/win-sign.js",
     "build-linux": "electron-builder --linux",
     "postinstall": "electron-builder install-app-deps"
   },

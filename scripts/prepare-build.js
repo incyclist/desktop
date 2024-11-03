@@ -73,7 +73,7 @@ async function copyFromServer(url) {
 
     console.log('checking version ...')
     let response = await axios.get(`${url}/api/v1/apps/${name}/${version}?uuid=update-react`)  ?? {}
-    let {reactVersion} = response?.data
+    let {reactVersion} = response?.data??{}
 
     if (!reactVersion?.length) {
         reactVersion = await getReactVersionFromUser();

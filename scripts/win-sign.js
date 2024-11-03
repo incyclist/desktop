@@ -2,7 +2,7 @@ const path = require('path');
 const {exec} = require('node:child_process');
 __dirname = path.join(__dirname,'..')
 
-const package = require( path.join(__dirname,'./package.json'));
+const package_json = require( path.join(__dirname,'./package.json'));
 
 const run = async (cmd) =>{
     return new Promise ((done)=>{
@@ -20,7 +20,7 @@ const run = async (cmd) =>{
 
 const main = async() =>{
 
-    const version = package.version
+    const version = package_json.version
     const signTool = 'node_modules\\electron-installer-windows\\vendor\\squirrel\\signtool.exe'
     const exeFile = `.\\installer\\win64\\incyclist-${version}-setup.exe`
     const certFile = path.join(__dirname,'certs/installer.pfx')

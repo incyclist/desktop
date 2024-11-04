@@ -31,8 +31,8 @@ jobs:
         dir .\src
 
     - name: Retrieve the settings and write them to a file
-    shell: pwsh    
-    env:
+      shell: pwsh    
+      env:
         SETTINGS_FILE: ${{ secrets.SETTINGS_FILE }}
       run: |
         $env:SETTINGS_FILE | Out-File .\config\settings.json

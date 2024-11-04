@@ -38,3 +38,12 @@ jobs:
         $env:SETTINGS_FILE | Out-File .\config\settings.json
         dir .\config
 
+    - name: Generate certificate file from secret
+      shell: pwsh    
+      env:
+        SETTINGS_FILE: ${{ secrets.CERT_WINDOWS }}
+      run: |
+        $encodedBytes = [System.Convert]::FromBase64String($env:CERT_WINDOWS);      
+        Set-Content .\certs\installer.pfx -Value $encodedBytes -AsByteStream;
+        dir .\certs
+  

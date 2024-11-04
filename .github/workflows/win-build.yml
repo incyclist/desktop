@@ -47,7 +47,26 @@ jobs:
         $encodedBytes = [System.Convert]::FromBase64String("${{ secrets.CERT_WINDOWS }}");      
         Set-Content .\certs\installer.pfx -Value $encodedBytes -AsByteStream;
         dir .\certs
-#        $pfx_cert_byte = [System.Convert]::FromBase64String("${{ secrets.CERT_WINDOWS }}")
-#        $currentDirectory = Get-Location
-#        $certificatePath = Join-Path -Path $currentDirectory -ChildPath certs -AdditionalChildPath installer.pfx
-#        [IO.File]::WriteAllBytes("$certificatePath", $pfx_cert_byte)
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+      
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Build Instakker
+      run: |
+        mkdir .\installer       
+        npm install       
+        npm run rebuild
+        npm run package-win64
+        npm run installer-win64
+  
+    - uses: actions/upload-artifact@v4
+      with:
+        name: package
+        path: ./installer/win64/
+
+  

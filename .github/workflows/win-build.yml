@@ -23,36 +23,50 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Retrieve the secret and write it to a file
+      shell: pwsh    
       env:
         SECRET_FILE: ${{ secrets.SECRET_FILE }}
       run: |
-        $env.SECRET_FILE | Out-File .\src\secrets.json        
+        $env:SECRET_FILE | Out-File .\src\secrets.json        
+        dir .\src
 
     - name: Retrieve the settings and write them to a file
+      shell: pwsh    
       env:
         SETTINGS_FILE: ${{ secrets.SETTINGS_FILE }}
       run: |
-        $env.SETTINGS_FILE | Out-File .\config\settings.json
+        $env:SETTINGS_FILE | Out-File .\config\settings.json
         dir .\config
+
+    - name: Generate certificate file from secret
+      shell: pwsh    
+      env:
+        SETTINGS_FILE: ${{ secrets.CERT_WINDOWS }}
+      run: |
+        New-Item -ItemType Directory -Force -Path .\certs
+        $encodedBytes = [System.Convert]::FromBase64String("${{ secrets.CERT_WINDOWS }}");      
+        Set-Content .\certs\installer.pfx -Value $encodedBytes -AsByteStream;
+        dir .\certs
 
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
-        
+      
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v2
 
     - name: Build Instakker
       run: |
-       mkdir .\installer       
-       npm install       
-       npm run rebuild
-       npm run package-win64
-       npm run installer-win64
-    
+        mkdir .\installer       
+        npm install       
+        npm run rebuild
+        npm run package-win64
+        npm run installer-win64
+  
     - uses: actions/upload-artifact@v4
       with:
         name: package
         path: ./installer/win64/
 
+  

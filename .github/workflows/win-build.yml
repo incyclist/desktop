@@ -43,7 +43,10 @@ jobs:
       env:
         SETTINGS_FILE: ${{ secrets.CERT_WINDOWS }}
       run: |
-        $encodedBytes = [System.Convert]::FromBase64String($env:CERT_WINDOWS);      
+        $encodedBytes = [System.Convert]::FromBase64String("${{ secrets.CERT_WINDOWS }}");      
         Set-Content .\certs\installer.pfx -Value $encodedBytes -AsByteStream;
         dir .\certs
-  
+#        $pfx_cert_byte = [System.Convert]::FromBase64String()
+#        $currentDirectory = Get-Location
+#        $certificatePath = Join-Path -Path $currentDirectory -ChildPath $env:Wap_Project_Directory -AdditionalChildPath $env:SigningCertificate
+#        [IO.File]::WriteAllBytes("$certificatePath", $pfx_cert_byte)

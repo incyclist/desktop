@@ -58,6 +58,11 @@ class DownloadSession extends EventEmitter {
                         this.isStopped = true;
                         this.emit('done')
                     })
+                    writeStream.on('error',err =>{
+                        this.isStopped = true;
+                        this.emit('error', new Error('Could not save video - error writing to file' ))
+                    })
+
                     this.logger.logEvent({message:'create write stream', fileName:this.fileName})                    
                 }
                 else if (res.statusCode===301) { 

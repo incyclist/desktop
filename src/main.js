@@ -8,10 +8,13 @@ function isSquirrelBusy() {
 if(isSquirrelBusy()) 
     process.exit();
 else {
-    const app = new Incyclist()   
+    Incyclist.init().then( ()=>{
+        const app = new Incyclist()   
 
-    app.checkSingleInstance(); // will terminate if app is already running
-    app.start();    
+        app.checkSingleInstance(); // will terminate if app is already running
+        app.start();    
+    
+    })
 }
 
 

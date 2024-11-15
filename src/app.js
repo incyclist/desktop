@@ -6,7 +6,6 @@ const axios = require('axios')
 const os = require('os');
 const RestLogAdapter = require('./modules/RestLogAdapter')
 const {checkDir,deleteFile,getLogDirectory,gnerateUUID} = require( './utils')
-const unhandled = require('electron-unhandled'); 
 const AutoUpdate = require('./modules/AutoUpdate')
 const {initFeaturesApp} = require('./features'); 
 const AppSettings  = require('./features/AppSettings');
@@ -17,8 +16,24 @@ const WindowManager = require('./web/manager');
 const APP_NAME = name;
 const APP_VERSION = version;
 
+let unhandled
+
 class IncyclistApp
 {
+
+    /**
+     * Initializes the unhandled library.
+     * This must be called before creating the IncyclistApp instance.
+     * 
+     * This is a workaround for the "Error [ERR_REQUIRE_ESM]: require() of ES Module" when importing unhandled via require() statement
+     * This workaround can be removed, when the app is converted to TypeScript
+     * @returns {Promise<void>}
+     */
+    static async init() {
+        const UnhandledLib = await import('electron-unhandled'); 
+        unhandled = UnhandledLib.default;
+    }
+
     constructor() {
         // initialize minimum required fot single instance check
         // all other initialization can be done in start())

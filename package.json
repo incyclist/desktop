@@ -42,17 +42,17 @@
     "fluent-ffmpeg": "^2.1.2",
     "gd-eventlog": "^0.1.24",
     "incyclist-ant-plus": "^0.3.1",
-    "incyclist-devices": "^2.2.1",
+    "incyclist-devices": "^2.2.8",
     "mp4frag": "^0.7.0",
     "mqtt": "^5.10.1",
     "request": "^2.88.2",
     "serialport": "^10.5.0",
-    "usb": "^2.13.0",
+    "usb": "^2.14.0",
     "uuid": "^10.0.0",
     "yauzl": "^3.2.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.6.0",
+    "@electron/rebuild": "^3.7.1",
     "@mapbox/node-pre-gyp": "^1.0.11",
     "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",
@@ -64,7 +64,7 @@
     "fs-extra": "^11.1.1",
     "jest": "^29.6.2",
     "lnk": "^1.1.0",
-    "node-addon-api": "^8.2.1",
+    "node-addon-api": "^8.2.2",
     "node-gyp": "^10.0.1"
   },
   "jest": {

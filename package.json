@@ -1,7 +1,7 @@
 {
   "name": "incyclist",
   "productName": "Incyclist",
-  "version": "0.9.7",
+  "version": "0.9.9",
   "copyright": "Guido Doumen, Jeroen Doumen",
   "description": "Incyclist Desktop App",
   "main": "src/main.js",
@@ -10,17 +10,16 @@
     "coverage": "jest --coverage",
     "start": "electron ./",
     "rebuild": "electron-rebuild",
-    "update-react-app": "node ./scripts/update-react",
     "prepare-build": "node ./scripts/prepare-build",
-    "package-mac": "npm run update-react-app && electron-packager . --overwrite --platform=darwin --arch=x64  --prune=true --out=release --icon ./src/public/incyclist && npm i",
+    "package-mac": "npm run prepare-build && cd ./release/darwin && electron-packager . --overwrite --platform=darwin --arch=x64  --prune=true --out=. --icon ./src/public/incyclist && npm i",
     "package-win32": "node ./scripts/win-package ./config/win32-package.json",
     "package-win64": "node ./scripts/win-package ./config/win64-package.json",
     "package-win64-dev": "node ./scripts/win-package ./config/win64-package-dev.json",
-    "package": "npm run update-react-app && node ./scripts/win-package && npm i",
-    "installer-mac": "electron-installer-dmg ./release/incyclist-darwin-x64/incyclist.app --out=./release/installer incyclist",
-    "installer-win64": "node ./scripts/win-installer.js ./config/win64-installer.json",
+    "installer-mac": " cd ./release/darwin && electron-installer-dmg ./incyclist-darwin-x64/incyclist.app --out=../../installer/mac incyclist",
+    "installer-win64": "node ./scripts/win-installer.js ./config/win64-installer.json && npm run sign-win64",
     "installer-win32": "node ./scripts/win-installer.js ./config/win32-installer.json",
-    "installer-linux64": "npm run prepare-build && cd ./release/linux && npm run build-linux",
+    "installer-linux64": "npm run prepare-build ./config/linux64-installer.json && cd ./release/linux && npm run build-linux",
+    "sign-win64": "node ./scripts/win-sign.js",
     "build-linux": "electron-builder --linux",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -32,78 +31,40 @@
   "homepage": "https://incyclist.com",
   "license": "MIT",
   "gypfile": true,
-  "build": {
-    "publish": {
-      "provider": "generic",
-      "url": "https://updates.incyclist.com/download/app/latest/linux/x64"
-    },
-    "appId": "incyclist",
-    "productName": "Incyclist",
-    "nodeGypRebuild": false,
-    "win32": {
-      "directories": {
-        "app": "./",
-        "buildResources": "./res"
-      }
-    },
-    "linux": {
-      "category": "Games",
-      "maintainer": "Guido Doumen",
-      "directories": {
-        "app": "./",
-        "buildResources": "./res",
-        "output": "../installer/linux/x64"
-      }
-    },
-    "snap": {
-      "environment": {
-        "DISABLE_WAYLAND": "1"
-      }
-    },
-    "extraFiles": [
-      {
-        "from": "bin/${os}",
-        "to": "Resources/bin",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ]
-  },
   "dependencies": {
     "@serialport/bindings-cpp": "^10.8.0",
     "@stoprocent/noble": "^1.13.6",
-    "axios": "^0.21.1",
+    "axios": "^1.7.7",
     "chrome-native-messaging": "^0.2.0",
     "electron-squirrel-startup": "^1.0.0",
-    "electron-unhandled": "^4.0.1",
+    "electron-unhandled": "^5.0.0",
     "electron-updater": "^6.1.8",
     "fluent-ffmpeg": "^2.1.2",
     "gd-eventlog": "^0.1.24",
     "incyclist-ant-plus": "^0.3.1",
     "incyclist-devices": "^2.2.1",
     "mp4frag": "^0.7.0",
-    "mqtt": "^5.3.5",
+    "mqtt": "^5.10.1",
     "request": "^2.88.2",
     "serialport": "^10.5.0",
     "usb": "^2.13.0",
-    "uuid": "^9.0.1",
-    "yauzl": "^2.10.0"
+    "uuid": "^10.0.0",
+    "yauzl": "^3.2.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0",
     "@mapbox/node-pre-gyp": "^1.0.11",
-    "axios-mock-adapter": "^1.18.1",
+    "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",
-    "electron": "^29.0.1",
-    "electron-builder": "^24.9.1",
+    "electron": "^33.0.1",
+    "electron-builder": "^25.1.8",
     "electron-installer-dmg": "^3.0.0",
     "electron-installer-windows": "^3.0.0",
     "electron-packager": "^16.0.0",
     "fs-extra": "^11.1.1",
     "jest": "^29.6.2",
     "lnk": "^1.1.0",
-    "node-addon-api": "^7.1.0",
+    "node-addon-api": "^8.2.1",
     "node-gyp": "^10.0.1"
   },
   "jest": {

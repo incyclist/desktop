@@ -5,16 +5,35 @@ const axios = require('axios')
 const package_json = require('../package.json')
 const os = require('os');
 const { ZipData } = require('../src/modules/zip')
+const readline = require('node:readline');
 
 const { version,name} = package_json
+
+function getReactVersionFromUser() {
+    return new Promise (resolve =>{
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+          });
+          rl.question(`UI Version?`, version => {
+            rl.close();
+            resolve(version)
+          });
+    
+    })
+}
 
 async function copyFromServer(url,targetDir) {
 
     axios.defaults.headers.common = { "X-uuid":"update-react","X-arch":os.arch(), "X-platform":os.platform(), "user-agent": `update-react/${version} (${os.platform()};${os.arch()};${os.release()})`};
 
     console.log('checking version ...')
-    let response = await axios.get(`${url}/api/v1/apps/${name}/${version}?uuid=update-react`) || {}
-    const {reactVersion} = response.data||{};
+    let response = await axios.get(`${url}/api/v1/apps/${name}/${version}?uuid=update-react`) ?? {}
+    let {reactVersion} = response.data||{};
+
+    if (!reactVersion?.length) {
+        reactVersion = await getReactVersionFromUser();
+    }
     if (!reactVersion)
         throw new Error('could not identify react version')
 

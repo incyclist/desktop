@@ -6,7 +6,6 @@ const axios = require('axios')
 const os = require('os');
 const RestLogAdapter = require('./modules/RestLogAdapter')
 const {checkDir,deleteFile,getLogDirectory,gnerateUUID} = require( './utils')
-const unhandled = require('electron-unhandled'); 
 const AutoUpdate = require('./modules/AutoUpdate')
 const {initFeaturesApp} = require('./features'); 
 const AppSettings  = require('./features/AppSettings');
@@ -17,8 +16,24 @@ const WindowManager = require('./web/manager');
 const APP_NAME = name;
 const APP_VERSION = version;
 
+let unhandled
+
 class IncyclistApp
 {
+
+    /**
+     * Initializes the unhandled library.
+     * This must be called before creating the IncyclistApp instance.
+     * 
+     * This is a workaround for the "Error [ERR_REQUIRE_ESM]: require() of ES Module" when importing unhandled via require() statement
+     * This workaround can be removed, when the app is converted to TypeScript
+     * @returns {Promise<void>}
+     */
+    static async init() {
+        const UnhandledLib = await import('electron-unhandled'); 
+        unhandled = UnhandledLib.default;
+    }
+
     constructor() {
         // initialize minimum required fot single instance check
         // all other initialization can be done in start())
@@ -46,7 +61,10 @@ class IncyclistApp
             this.logger.logEvent( {message:'2nd Instance detected - terminating'})
             app.quit()
         } else {
+            this.logger.logEvent( {message:'got the instance lock'})
+
             app.on('second-instance', () => {
+                this.logger.logEvent( {message:'2nd Instance launched '})
                 // Someone tried to run a second instance, we should focus our window.
                 this.windowManager.focusActive()
             })
@@ -100,7 +118,8 @@ class IncyclistApp
 
         // Quit when all windows are closed.
         app.on('window-all-closed', ()=> this.onWindowAllClosed())
-        app.on('activate', () => this.onActive());
+        app.on('activate', (e,hasVisibleWindows) => this.onActive(hasVisibleWindows));
+
         app.on('before-quit', (e)=> this.onBeforeQuit(e))
         app.on('will-quit', (e) => this.onWillQuit(e))
         app.on('session-created', (_event,session) => this.onSessionCreated(session) )
@@ -326,12 +345,13 @@ class IncyclistApp
     }  
 
 
-    onActive() {
+    onActive(hasVisibleWindows) {
         this.logger.logEvent({message:'app event',event:'active'})
 
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
-        this.windowManager.createMainWindow()
+        if (!hasVisibleWindows)
+            this.windowManager.createMainWindow()
     
     }
 

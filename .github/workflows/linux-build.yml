@@ -24,6 +24,12 @@ jobs:
         SECRET_FILE: ${{ secrets.SECRET_FILE }}
       run: |
         echo $SECRET_FILE > ./src/secrets.json
+        
+    - name: install libusb
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libusb-1.0-0-dev
+        sudo apt-get install -y libudev-dev        
 
     - name: Retrieve the settings and write them to a file
       env:
@@ -45,10 +51,10 @@ jobs:
       with:
         name: AppImage
         path: |
-          ./dist/*.AppImage
-          ./dist/latest-linux.yml
+          ./installer/linux/x64/*.AppImage
+          ./installer/linux/x64/latest-linux.yml
 
     - uses: actions/upload-artifact@v4
       with:
         name: snap
-        path: ./dist/*.snap
+        path: ./installer/linux/x64/*.snap

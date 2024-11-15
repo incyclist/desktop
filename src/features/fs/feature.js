@@ -1,7 +1,6 @@
 const request = require( 'request')
 const fs = require ( 'fs');
-const {promises} = require ( 'fs');
-const promiseFs = promises
+const promiseFs = require('node:fs/promises')
 const path = require('path')
 const Feature = require('../base');
 const {checkDir} = require('../../utils')
@@ -105,6 +104,7 @@ class FileSystemSupport extends Feature{
         ipcHandle('fs-write-file',promiseFs.writeFile,ipcMain)
         ipcHandle('fs-read-file',promiseFs.readFile,ipcMain)
         ipcHandle('fs-append-file',fs.appendFile,ipcMain)
+        ipcHandle('fs-access',promiseFs.access,ipcMain)
         ipcHandleSync('fs-existsSync',fs.existsSync,ipcMain)
         ipcHandleSync('fs-checkDir',checkDir,ipcMain)
         ipcHandle('fs-unlink',promiseFs.unlink,ipcMain)
@@ -146,6 +146,7 @@ class FileSystemSupport extends Feature{
         spec.fs.writeFile               = ipcCall('fs-write-file',ipcRenderer) 
         spec.fs.readFile                = ipcCall('fs-read-file',ipcRenderer) 
         spec.fs.appendFile              = ipcCall('fs-append-file',ipcRenderer) 
+        spec.fs.access                  = ipcCall('fs-access',ipcRenderer) 
         spec.fs.existsSync              = ipcCallSync('fs-existsSync',ipcRenderer) 
         spec.fs.checkDir                = ipcCallSync('fs-checkDir',ipcRenderer) 
         spec.fs.unlink                  = ipcCall('fs-unlink',ipcRenderer) 
@@ -170,7 +171,7 @@ class FileSystemSupport extends Feature{
         spec.path.parse               = ipcCallSync('fs-path-parse',ipcRenderer) 
         spec.path.join                = ipcCallSync('fs-path-join',ipcRenderer) 
         spec.registerFeatures( [
-            'fileSystem','fileSystem.stream','fileSystem.unlink','fileSystem.readdir'
+            'fileSystem','fileSystem.stream','fileSystem.unlink','fileSystem.readdir', 'fileSystem.access'
         ] )
 
     }

@@ -20,7 +20,7 @@ const {build={}} = require(config)??{}
 
 console.log( 'config:', build)
 console.log('Platform:', os.platform(),build[os.platform()])
-const buildResources = build?.directories?.buildResources || "./res"
+const buildResources = build?.directories?.buildResources || ( os.platform()==='darwin' ? "./build" : "./res" )
 const buildDir = path.join(baseDir,`release/${os.platform()}`)
 const appBuildDir = path.join(buildDir,buildResources)
 
@@ -124,6 +124,7 @@ console.log('~~~ Resources Dir:', appBuildDir)
 checkDir(buildResources)
 
 fs.cpSync(path.join(baseDir,'./res'),appBuildDir, {recursive: true})
+
 
 
 if (os.platform()==='win32') {

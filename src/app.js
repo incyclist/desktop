@@ -99,8 +99,6 @@ class IncyclistApp
             
             this.setupCrashReporting()
 
-            this.logDirectConnect()
-
             // the rest of the startup will be triggered once electron fires the ready event, handled by onReady()
             
         }
@@ -130,23 +128,6 @@ class IncyclistApp
         ipcMain.on ('errorInWindow',(event,source,err)=>this.onCrash(event,source,err) )
 
     }
-
-    logDirectConnect() {
-        try {
-            const {Bonjour} = require('bonjour-service')
-
-            const bonjour = new Bonjour()
-            this.logger.logEvent( {message:'scanning for bonjour services'})
-            bonjour.find({},(service)=> {
-                this.logger.logEvent( {message:'Found a bonjour service',service:JSON.stringify(service)})                
-            })
-        }
-        catch(err) {
-            this.logger.logEvent( {message:'Exception',fn:'app.logDirectConnect()',error:err.message,stack:err.stack})
-        }
-    }
-
-
 
     async onReady() {
         while (!this.state.ready) {

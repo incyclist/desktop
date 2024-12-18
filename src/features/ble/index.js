@@ -371,9 +371,13 @@ class BLEFeature extends Feature {
 
                 return new Promise( done=> {
                     try {
-                        const res = characteristic.write( b,false, (err)=>{
-                            done(err)
-                        })
+                        characteristic.write( b,false)
+                            .then ( (res)=> {
+                                done(res)
+                            })
+                            .catch( (err)=> {
+                                done(err)
+                            })
 
                         //console.log('~~~ BLEFeature WRITE RESUT',res)
                         //return res

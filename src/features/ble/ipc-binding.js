@@ -209,6 +209,11 @@ class NobleIpcBinding extends events.EventEmitter {
                 peripheral.disconnect = (cb) => {
                     return this.disconnectDevice(peripheral,cb)
                 }
+                peripheral.disconnectAsync = () => {
+                    return new Promise ( (done)=> { 
+                        this.disconnectDevice(peripheral,done) 
+                    })
+                }
 
                 peripheral.on = (event, callback) => { peripheral.emitter.on(event, callback) }              
                 peripheral.off = (event, callback) => { peripheral.emitter.off(event, callback) }              

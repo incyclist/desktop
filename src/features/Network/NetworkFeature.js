@@ -39,8 +39,7 @@ class NetworkFeature extends Feature{
     }
 
     connectSocket(id, port,host) {
-        const {socket} = this.sockets[id]
-
+        const socket = this._getSocket(id)
         if (!socket)
             return null;
 
@@ -59,19 +58,24 @@ class NetworkFeature extends Feature{
    }
 
     destroySocket(id) {
-        const {socket} = this.sockets[id]
-
+        const socket = this._getSocket(id)
         if (!socket)
             return;
 
-        socket.removeAllListeners()
+        socket.on('close',()=>{
+            ipcSendEvent('network-socket-event', id, 'close',false)
+            socket.removeAllListeners()
+
+            delete this.sockets[id]
+    
+        })
+
         socket.destroy()
-        delete this.sockets[id]
+
     }
 
     writeSocket(id, data) {
-        const {socket} = this.sockets[id]
-
+        const socket = this._getSocket(id)
         if (!socket)
             throw new Error('Socket not found')
 
@@ -87,6 +91,12 @@ class NetworkFeature extends Feature{
         ipcHandleSync('network-destroy-socket',this.destroySocket.bind(this),ipcMain)
         ipcHandleSync('network-write-socket',this.writeSocket.bind(this),ipcMain)   
 
+    }
+
+    
+    _getSocket(id) {
+        const {socket} = this.sockets[id]??{}
+        return socket
     }
 
     registerRenderer( spec, ipcRenderer) {

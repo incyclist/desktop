@@ -43,6 +43,7 @@ class IpcSocketBinding extends EventEmitter {
         this.api.initSocket(this.id)
 
 
+
     }
 
     onEvent(event,...args) {
@@ -61,10 +62,17 @@ class IpcSocketBinding extends EventEmitter {
     }
     
     destroy() {
-        this.api.destroySocket(this.id)
-        this.emitter.off(`${this.id}-event`,this.eventHandler)
-        delete this.emitter
-        return this
+        return new Promise( (resolve,reject) => {
+            this.on('error',reject)
+            this.on('close',()=>{
+                this.emitter.off(`${this.id}-event`,this.eventHandler)
+                delete this.emitter
+                resolve(this)
+        
+            })
+    
+            this.api.destroySocket(this.id)                
+        })
     }
     
     write(data) { 

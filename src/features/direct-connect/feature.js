@@ -50,8 +50,9 @@ class DirectConnectSupport extends Feature{
     }       
 
     handleAnnouncement(service) {
-        const {name,txt,port,referer,protocol} = service
+        const {name,txt,port,referer,protocol,type,} = service
         const announcement = {
+            type,
             name,address:referer?.address,protocol,port,
             serialNo:txt?.['serial-number'], 
             serviceUUIDs:txt?.['ble-service-uuids']?.split(',')

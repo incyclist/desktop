@@ -74,6 +74,7 @@ class WinrtBindings extends events.EventEmitter {
         this.appDirectory = appDirectory;        
         this.bleServerDebug = props.bleServerDebug || true
         this.loggingPaused = false
+        this.advertisements = {}
        
     }
 
@@ -234,14 +235,24 @@ class WinrtBindings extends events.EventEmitter {
             console.error('BLEServer:', data);
         });
         this._bleServer.on('close', (code) => {
+            if (this.state!=='poweredOff') {
+                this.state = 'poweredOff';
+                this.emit('stateChange', this.state);
+            }
+        });
+        this._bleServer.on('exit', (code) => {
             this.state = 'poweredOff';
             this.emit('stateChange', this.state);
         });
+        this._bleServer.on('error', (err) => {
+            this.logEvent({message:'BLE Server error', error:err.message})
+        });
         this._bleServer.stdin.on('error', (err) => { 
-            console.error('BLEServer:', err);
+            this.logEvent({message:'BLE Server error (stdin)', error:err.message??err})
+            
         })
         this._bleServer.stdout.on('error', (err) => { 
-            console.error('BLEServer:', err);
+            this.logEvent({message:'BLE Server error (stdout)', error:err.message??err})
         })
     }
 
@@ -320,8 +331,7 @@ class WinrtBindings extends events.EventEmitter {
         */
         
         this.logEvent({message: 'BLEServer connect', address});
-
-        this.stopScanning()
+        
         return this._sendRequest({ cmd: 'connect', 'address': address })
         .then(result => {
             this._deviceMap[address] = result;
@@ -480,117 +490,7 @@ class WinrtBindings extends events.EventEmitter {
                     break;
     
                 case 'scanResult':
-                    {
-                        const address =   message.bluetoothAddress;
-                        const advType = message.advType;
-                        const uuid = message.bluetoothAddress.replace(/:/g, '')
-                        const advertisement = {
-                            localName: message.localName,
-                            txPowerLevel: 0,
-                            manufacturerData: null,
-                            serviceUuids: message.serviceUuids.map(fromWindowsUuid),
-                            serviceData: [],
-                        };
-        
-                        try {
-                            if (this.bleServerDebug){
-                                const {address,localName,serviceUuids} = advertisement
-                                this.logEvent( {message:'BLEserver in:', type:'scanResult', address,localName,serviceUuids,advType,rssi:message.rssi});
-                            }
-                        }
-                        catch(err) {
-                            console.log('~~~ BLEServer in', message, err)
-                        }
-        
-                        switch ( advType) {
-                            case 'NonConnectableUndirected': 
-                                break;
-                            case 'ConnectableUndirected':
-                            case 'ScanableUndirected':
-        
-                                isPeripheralValid = true;
-                                /*
-                                if (this.scanProps && this.scanProps.targets && Array.isArray(this.scanProps.targets)  &&  this.scanProps.targets.length>0) {
-                                    const serviceIds = advertisement.serviceUuids;
-                                    isPeripheralValid = false;
-                                    this.scanProps.targets.forEach( requested => {
-                                        if ( serviceIds.find( announced => matches(requested, announced) )!==undefined )
-                                            isPeripheralValid = true;   
-                                    })
-                                    
-                                }
-                                */
-                                if (this.scanProps && this.scanProps.emitted && Array.isArray(this.scanProps.emitted)) {
-                                    if (this.scanProps.emitted.find( e => e===address )!==undefined)
-                                        isPeripheralValid = false;
-                                }
-                                
-                                //console.log( '~~~ found',address,isPeripheralValid,this.scanProps.targets,this.scanProps.emitted, advertisement.serviceUuids) //.map( sid ) )  => ({sid,valid:matches(sid,this.scanProps.targets[0],sid)})))
-        
-                                if (isPeripheralValid) {
-                                    this.scanResult[address] = { uuid, address,advertisement }
-                                    if ( address!==undefined && address!=='' && 
-                                         advertisement.localName && advertisement.localName!=='' &&
-                                         advertisement.serviceUuids == advertisement.serviceUuids.length>0) {
-                                            this.emit(
-                                                'discover',
-                                                uuid,
-                                                address,
-                                                'public', // TODO address type
-                                                true, // TODO connectable
-                                                advertisement,
-                                                message.rssi);
-                                         }
-                                         if (this.scanProps) {
-                                            if (!this.scanProps.emitted)
-                                                this.scanProps.emitted = []
-                                            this.scanProps.emitted.push(address)
-                                         }
-            
-                                }
-        
-                                break;
-                            case 'ScanResponse':
-        
-                                let d =  this.scanResult[address];
-                                if (!d) 
-                                    d = this.scanResult[address] = { uuid, address,advertisement }
-                                else {
-                                    if (d.advertisement.localName==='' && advertisement.localName!=='') 
-                                        d.advertisement.localName = advertisement.localName
-                                    if (advertisement.serviceUuids) 
-                                        advertisement.serviceUuids.forEach( sid => { 
-                                            if (!d.advertisement.serviceUuids)
-                                                d.advertisement.serviceUuids = []
-                                            if (!d.advertisement.serviceUuids.find( sid1 => sid1===sid))
-                                                d.advertisement.serviceUuids.push(sid)                                    
-                                        }) 
-                                }
-                                
-                                isPeripheralValid = true;
-                                if (isPeripheralValid) {
-            
-                                    this.emit(
-                                        'discover',
-                                        uuid,
-                                        address,
-                                        'public', // TODO address type
-                                        true, // TODO connectable
-                                        d.advertisement,
-                                        message.rssi);
-                                    if (this.scanProps) {
-                                        if (!this.scanProps.emitted)
-                                            this.scanProps.emitted = []
-                                        this.scanProps.emitted.push(address)
-                                        }
-        
-            
-                                }
-        
-                                break;
-                
-                        }  
-                    }
+                    isPeripheralValid = this.processScanResult(message, isPeripheralValid);
                     break;
     
 
@@ -704,6 +604,150 @@ class WinrtBindings extends events.EventEmitter {
         }
 
 
+    }
+
+    processScanResult(message, isPeripheralValid) {
+        {
+            const advertisement = this.buildAdvertisement(message);
+            const { advType } = message;
+            const { address, localName, serviceUuids, uuid,rssi,ts } = advertisement;
+
+            try {
+                if (this.bleServerDebug && ts<Date.now()-1000) {
+                    this.logEvent({ message: 'BLEserver in:', type: 'scanResult', address, localName, serviceUuids, advType, rssi});
+                    advertisement.ts = Date.now()
+                }
+            }
+            catch (err) {
+                console.log('~~~ BLEServer in', message, err);
+            }
+
+            switch (advType) {
+                case 'NonConnectableUndirected':
+                    break;
+                case 'ConnectableUndirected':
+                case 'ScanableUndirected':
+
+                    isPeripheralValid = true;
+
+                    if (this.scanProps && this.scanProps.emitted && Array.isArray(this.scanProps.emitted)) {
+                        if (this.scanProps.emitted.find(e => e === address) !== undefined)
+                            isPeripheralValid = false;
+                    }
+
+                    //console.log( '~~~ found',address,isPeripheralValid,this.scanProps.targets,this.scanProps.emitted, advertisement.serviceUuids) //.map( sid ) )  => ({sid,valid:matches(sid,this.scanProps.targets[0],sid)})))
+                    if (isPeripheralValid) {
+
+                        this.scanResult[address] = { uuid, address, advertisement };
+                        if (address !== undefined && address !== '' &&
+                            advertisement.localName && advertisement.localName !== '' &&
+                            advertisement.serviceUuids == advertisement.serviceUuids.length > 0) {
+                            this.emit(
+                                'discover',
+                                uuid,
+                                address,
+                                'public', // TODO address type
+                                true, // TODO connectable
+                                advertisement,
+                                message.rssi);
+                        }
+                        if (this.scanProps) {
+                            if (!this.scanProps.emitted)
+                                this.scanProps.emitted = [];
+                            this.scanProps.emitted.push(address);
+                        }
+
+                    }
+
+                    break;
+                case 'ScanResponse':
+
+                    let d = this.scanResult[address];
+                    if (!d)
+                        d = this.scanResult[address] = { uuid, address, advertisement };
+                    else {
+                        if (d.advertisement.localName === '' && advertisement.localName !== '')
+                            d.advertisement.localName = advertisement.localName;
+                        if (advertisement.serviceUuids)
+                            advertisement.serviceUuids.forEach(sid => {
+                                if (!d.advertisement.serviceUuids)
+                                    d.advertisement.serviceUuids = [];
+                                if (!d.advertisement.serviceUuids.find(sid1 => sid1 === sid))
+                                    d.advertisement.serviceUuids.push(sid);
+                            });
+                    }
+
+                    isPeripheralValid = true;
+                    if (isPeripheralValid) {
+
+                        this.emit(
+                            'discover',
+                            uuid,
+                            address,
+                            'public', // TODO address type
+                            true, // TODO connectable
+                            d.advertisement,
+                            message.rssi);
+                        if (this.scanProps) {
+                            if (!this.scanProps.emitted)
+                                this.scanProps.emitted = [];
+                            this.scanProps.emitted.push(address);
+                        }
+
+
+                    }
+
+                    break;
+
+            }
+        }
+        return isPeripheralValid;
+    }
+
+    buildAdvertisement(message) {
+        const address =   message.bluetoothAddress;
+
+        let uuid = address
+        uuid = uuid.replace(/:/g, '')
+
+        const existing = this.advertisements[address]??{}
+
+        const previous = {...existing}
+        delete previous.ts
+        
+        const getServices = () => {
+            const uuids = existing.serviceUuids??[]
+            const announced = message.serviceUuids.map(fromWindowsUuid)
+            if (announced) {
+                announced.forEach( uuid =>  {
+                    if (!uuids.includes(uuid))
+                        uuids.push(uuid)
+                })
+            }
+                
+            return uuids
+        }
+
+        const getName = ()=> {
+            const announced = message.localName
+            return announced?.length>0  ? announced : existing.localName??''
+        }
+
+        const advertisement =  {
+            uuid,
+            address,
+            localName: getName(),
+            serviceUuids: getServices(),
+            serviceData: [],
+            rssi: message.rssi,
+        };
+
+        if ( JSON.stringify(advertisement) === JSON.stringify(previous)) {
+            advertisement.ts = existing.ts
+        }
+        
+        this.advertisements[address] = advertisement
+        return advertisement
     }
 
     _sendMessage(message) {

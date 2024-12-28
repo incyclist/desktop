@@ -613,9 +613,12 @@ class WinrtBindings extends events.EventEmitter {
             const { address, localName, serviceUuids, uuid,rssi,ts } = advertisement;
 
             try {
-                if (this.bleServerDebug && ts<Date.now()-1000) {
+                if (this.bleServerDebug && (!ts || ts<(Date.now()-1000))) {
                     this.logEvent({ message: 'BLEserver in:', type: 'scanResult', address, localName, serviceUuids, advType, rssi});
+
+                    // update timestamp
                     advertisement.ts = Date.now()
+                    this.advertisements[address] = advertisement
                 }
             }
             catch (err) {

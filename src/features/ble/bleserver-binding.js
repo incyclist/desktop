@@ -241,8 +241,10 @@ class WinrtBindings extends events.EventEmitter {
             }
         });
         this._bleServer.on('exit', (code) => {
-            this.state = 'poweredOff';
-            this.emit('stateChange', this.state);
+            if (this.state!=='poweredOff') {
+                this.state = 'poweredOff';
+                this.emit('stateChange', this.state);    
+            }            
         });
         this._bleServer.on('error', (err) => {
             this.logEvent({message:'BLE Server error', error:err.message})
@@ -613,7 +615,7 @@ class WinrtBindings extends events.EventEmitter {
             const { address, localName, serviceUuids, uuid,rssi,ts } = advertisement;
 
             try {
-                if (this.bleServerDebug && (!ts || ts<(Date.now()-1000))) {
+                if (this.bleServerDebug && !ts) {
                     this.logEvent({ message: 'BLEserver in:', type: 'scanResult', address, localName, serviceUuids, advType, rssi});
 
                     // update timestamp
@@ -717,6 +719,7 @@ class WinrtBindings extends events.EventEmitter {
 
         const previous = {...existing}
         delete previous.ts
+        delete previous.rssi
         
         const getServices = () => {
             const uuids = existing.serviceUuids??[]
@@ -742,12 +745,12 @@ class WinrtBindings extends events.EventEmitter {
             localName: getName(),
             serviceUuids: getServices(),
             serviceData: [],
-            rssi: message.rssi,
         };
 
         if ( JSON.stringify(advertisement) === JSON.stringify(previous)) {
             advertisement.ts = existing.ts
         }
+        advertisement.rssi = message.rssi
         
         this.advertisements[address] = advertisement
         return advertisement

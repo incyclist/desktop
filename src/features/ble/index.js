@@ -220,10 +220,10 @@ class BLEFeature extends Feature {
         }
     }
 
-    async getServicesRequest(event, callId, id,services,characteristics) { 
+    async getServicesAndCharacteristicsRequest(event, callId, id,services,characteristics) { 
         const peripheral = this.peripherals.find( p => p.id===id);
         let error = null;
-        let res = undefined
+        let res
         if ( peripheral ) { 
             try {
                 res = await peripheral.discoverSomeServicesAndCharacteristicsAsync(services,characteristics);                
@@ -233,10 +233,31 @@ class BLEFeature extends Feature {
             catch (err) { 
                 error = err;
             }
-            ipcResponse(event.sender,'ble-getServices', callId, {   
+            ipcResponse(event.sender,'ble-getServicesChars', callId, {   
                 error,
                 services:res.services? res.services.map(clone):null, 
                 characteristics:characteristics? res.characteristics.map(clone): null
+            });
+        }
+    }
+
+    async getServicesRequest(event, callId, id,requestedServices) {
+        const peripheral = this.peripherals.find( p => p.id===id);
+        let error = null;
+        let services
+
+        if ( peripheral ) { 
+            try {
+                services = await peripheral.discoverServicesAsync(requestedServices);                
+                peripheral.services = services;
+                
+            }
+            catch (err) { 
+                error = err;
+            }
+            ipcResponse(event.sender,'ble-getServices', callId, {   
+                error,
+                services:services? services.map(clone):null,                 
             });
         }
     }
@@ -455,7 +476,8 @@ class BLEFeature extends Feature {
             ipcMain.on('ble-stopScanning',(event, callId) => ble.stopScanningRequest(event, callId));
             ipcMain.on('ble-onEvent',(event, callId, eventName) => ble.onEventRequest(event, callId,eventName));
             ipcMain.on('ble-connectDevice',(event, callId, id) => ble.connectDeviceRequest(event, callId,id));
-            ipcMain.on('ble-getServices',(event, callId, id,services,characteristics) => ble.getServicesRequest(event, callId,id,services,characteristics));
+            ipcMain.on('ble-getServicesChars',(event, callId, id,services,characteristics) => ble.getServicesAndCharacteristicsRequest(event, callId,id,services,characteristics));
+            ipcMain.on('ble-getServices',(event, callId, id,services) => ble.getServices(event, callId,id,services));
             ipcMain.on('ble-subscribe',(event, callId, id,characteristic) => ble.subscribeRequest(event, callId,id,characteristic));
             ipcMain.on('ble-unsubscribe',(event, callId, id,characteristic) => ble.unsubscribeRequest(event, callId,id,characteristic));
             ipcMain.on('ble-read',(event, callId, id,characteristic) => ble.readRequest(event, callId,id,characteristic));
@@ -486,6 +508,7 @@ class BLEFeature extends Feature {
         spec.ble.onEvent          = ipcCall('ble-onEvent',ipcRenderer)
         spec.ble.connectDevice    = ipcCall('ble-connectDevice',ipcRenderer)       
         spec.ble.getServices      = ipcCall('ble-getServices',ipcRenderer)       
+        spec.ble.getServicesAndCharacteristics      = ipcCall('ble-getServicesChars',ipcRenderer)       
         spec.ble.subscribe        = ipcCall('ble-subscribe',ipcRenderer)       
         spec.ble.unsubscribe      = ipcCall('ble-unsubscribe',ipcRenderer)       
         spec.ble.read             = ipcCall('ble-read',ipcRenderer)       

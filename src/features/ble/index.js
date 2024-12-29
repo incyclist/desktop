@@ -477,7 +477,7 @@ class BLEFeature extends Feature {
             ipcMain.on('ble-onEvent',(event, callId, eventName) => ble.onEventRequest(event, callId,eventName));
             ipcMain.on('ble-connectDevice',(event, callId, id) => ble.connectDeviceRequest(event, callId,id));
             ipcMain.on('ble-getServicesChars',(event, callId, id,services,characteristics) => ble.getServicesAndCharacteristicsRequest(event, callId,id,services,characteristics));
-            ipcMain.on('ble-getServices',(event, callId, id,services) => ble.getServices(event, callId,id,services));
+            ipcMain.on('ble-getServices',(event, callId, id,services) => ble.getServicesRequest(event, callId,id,services));
             ipcMain.on('ble-subscribe',(event, callId, id,characteristic) => ble.subscribeRequest(event, callId,id,characteristic));
             ipcMain.on('ble-unsubscribe',(event, callId, id,characteristic) => ble.unsubscribeRequest(event, callId,id,characteristic));
             ipcMain.on('ble-read',(event, callId, id,characteristic) => ble.readRequest(event, callId,id,characteristic));

@@ -244,6 +244,10 @@ class WinrtBindings extends events.EventEmitter {
             if (this.state!=='poweredOff') {
                 this.state = 'poweredOff';
                 this.emit('stateChange', this.state);    
+
+                this._bleServer.removeAllListeners()
+                delete this._bleServer;
+                this.launchBleServer()
             }            
         });
         this._bleServer.on('error', (err) => {
@@ -295,8 +299,7 @@ class WinrtBindings extends events.EventEmitter {
             if (!this.app) 
                 await this.download()
             if (this.app) {
-                this._bleServer = spawn(this.app, ['']);
-                this.initBleServer();
+                this.launchBleServer()
             }    
     
         }
@@ -306,6 +309,11 @@ class WinrtBindings extends events.EventEmitter {
         }
 
         
+    }
+
+    launchBleServer() {
+        this._bleServer = spawn(this.app, ['']);
+        this.initBleServer();
     }
 
     startScanning(serviceUUIDs, allowDuplicates) {

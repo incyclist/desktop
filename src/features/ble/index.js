@@ -76,7 +76,6 @@ class BLEFeature extends Feature {
         const props = {}
 
 
-        // TODO: read bleServerDebug from settings and/or environment
         props.bleServerDebug = process.env.BLE_DEBUG;
 
         this.logger.logEvent({message:'init BLE feature'})
@@ -95,7 +94,6 @@ class BLEFeature extends Feature {
                 this.ble = new Noble(defaultBinding);
             }
             
-            //this.ble = new Noble(defaultBinding);
             const nop = ()=>{}
             if (this.ble) {
                 this.ble.setServerDebug = this.ble._bindings.setServerDebug || nop;
@@ -169,13 +167,6 @@ class BLEFeature extends Feature {
                 this.emit(eventName, peripheral)    
             })                
         }
-        /*
-        else if (eventName==='disconnect') {
-            this.emitter.on('discover-peripheral',(peripheral) => {
-                this.emit(eventName, peripheral)    
-            })                
-        }
-        */
         else {
             this.ble.on( eventName, (...args) =>{
                     const res = args.map(clone)
@@ -220,10 +211,10 @@ class BLEFeature extends Feature {
         }
     }
 
-    async getServicesRequest(event, callId, id,services,characteristics) { 
+    async getServicesAndCharacteristicsRequest(event, callId, id,services,characteristics) { 
         const peripheral = this.peripherals.find( p => p.id===id);
         let error = null;
-        let res = undefined
+        let res
         if ( peripheral ) { 
             try {
                 res = await peripheral.discoverSomeServicesAndCharacteristicsAsync(services,characteristics);                
@@ -233,10 +224,31 @@ class BLEFeature extends Feature {
             catch (err) { 
                 error = err;
             }
-            ipcResponse(event.sender,'ble-getServices', callId, {   
+            ipcResponse(event.sender,'ble-getServicesChars', callId, {   
                 error,
                 services:res.services? res.services.map(clone):null, 
                 characteristics:characteristics? res.characteristics.map(clone): null
+            });
+        }
+    }
+
+    async getServicesRequest(event, callId, id,requestedServices) {
+        const peripheral = this.peripherals.find( p => p.id===id);
+        let error = null;
+        let services
+
+        if ( peripheral ) { 
+            try {
+                services = await peripheral.discoverServicesAsync(requestedServices);                
+                peripheral.services = services;
+                
+            }
+            catch (err) { 
+                error = err;
+            }
+            ipcResponse(event.sender,'ble-getServices', callId, {   
+                error,
+                services:services? services.map(clone):null,                 
             });
         }
     }
@@ -342,8 +354,6 @@ class BLEFeature extends Feature {
         const peripheral = this.peripherals.find( p => p.id===peripheralId);
         const characteristic = peripheral.characteristics.find( c => c.uuid===characteristicUUID);
         
-        let error = null;        
-
         if ( peripheral && characteristic) { 
 
             let b = data;
@@ -371,12 +381,13 @@ class BLEFeature extends Feature {
 
                 return new Promise( done=> {
                     try {
-                        const res = characteristic.write( b,false, (err)=>{
-                            done(err)
-                        })
-
-                        //console.log('~~~ BLEFeature WRITE RESUT',res)
-                        //return res
+                        characteristic.write( b,false)
+                            .then ( (res)=> {
+                                done(res)
+                            })
+                            .catch( (err)=> {
+                                done(err)
+                            })
                     }
                     catch(err) {
                         done (err)
@@ -384,27 +395,9 @@ class BLEFeature extends Feature {
     
                 })
             }
-
-
-            /*
-
-            if (withoutResponse) {
-                return await characteristic.write( data,withoutResponse)                
-            }
-            else {
-                try {
-                    return  await characteristic.write( data,withoutResponse)
-                }
-                catch(err) {
-                    console.log ('~~~~ Index.js ERROR',err.message)
-                    throw err;
-                }
-            }
-            */
         }
         else { 
             throw new Error('device not found');
-            //ipcResponse(event.sender,'ble-write',callId, error);
         }        
     }
 
@@ -451,20 +444,16 @@ class BLEFeature extends Feature {
             ipcMain.on('ble-stopScanning',(event, callId) => ble.stopScanningRequest(event, callId));
             ipcMain.on('ble-onEvent',(event, callId, eventName) => ble.onEventRequest(event, callId,eventName));
             ipcMain.on('ble-connectDevice',(event, callId, id) => ble.connectDeviceRequest(event, callId,id));
-            ipcMain.on('ble-getServices',(event, callId, id,services,characteristics) => ble.getServicesRequest(event, callId,id,services,characteristics));
+            ipcMain.on('ble-getServicesChars',(event, callId, id,services,characteristics) => ble.getServicesAndCharacteristicsRequest(event, callId,id,services,characteristics));
+            ipcMain.on('ble-getServices',(event, callId, id,services) => ble.getServicesRequest(event, callId,id,services));
             ipcMain.on('ble-subscribe',(event, callId, id,characteristic) => ble.subscribeRequest(event, callId,id,characteristic));
             ipcMain.on('ble-unsubscribe',(event, callId, id,characteristic) => ble.unsubscribeRequest(event, callId,id,characteristic));
             ipcMain.on('ble-read',(event, callId, id,characteristic) => ble.readRequest(event, callId,id,characteristic));
-
-            //ipcMain.on('ble-write',(event, callId, id,characteristic,data, withoutResponse) => ble.writeRequest(event, callId,id,characteristic,data,withoutResponse));
 
             ipcHandle('ble-write', this.write.bind(this), ipcMain)
             ipcHandleNoResponse('ble-setServerDebug',this.setServerDebug.bind(this),ipcMain)
             ipcHandleNoResponse('ble-pauseLogging',this.pauseLogging.bind(this),ipcMain)
             ipcHandleNoResponse('ble-resumeLogging',this.resumeLogging.bind(this),ipcMain)
-
-            // ipcMain.on('mq-unsubscribe',(event, callId, topic) => mq.removeSubscription(event, callId, topic));
-            // ipcMain.on('mq-publish',(event, callId, topic,message) => mq.publishMessage(event, callId, topic,message));
         }
     }
 
@@ -482,6 +471,7 @@ class BLEFeature extends Feature {
         spec.ble.onEvent          = ipcCall('ble-onEvent',ipcRenderer)
         spec.ble.connectDevice    = ipcCall('ble-connectDevice',ipcRenderer)       
         spec.ble.getServices      = ipcCall('ble-getServices',ipcRenderer)       
+        spec.ble.getServicesAndCharacteristics      = ipcCall('ble-getServicesChars',ipcRenderer)       
         spec.ble.subscribe        = ipcCall('ble-subscribe',ipcRenderer)       
         spec.ble.unsubscribe      = ipcCall('ble-unsubscribe',ipcRenderer)       
         spec.ble.read             = ipcCall('ble-read',ipcRenderer)       

@@ -13,6 +13,7 @@ const Ant = require('./ant').getInstance();
 const Fs = require('./fs').getInstance();
 const OAuth = require('./oauth').getInstance()
 const Logging = require('./logging').getInstance()
+const DirectConnect = require('./direct-connect').getInstance()
 
 const {ObserverHandler} = require('./utils/observer')
 
@@ -35,6 +36,7 @@ function initFeaturesApp( props ) {
     OAuth.register(props);
     DownloadManager.register(props);
     Logging.register(props);
+    DirectConnect.register(props);
 
 }
 
@@ -72,6 +74,7 @@ function initFeaturesWeb( electron,ipcRenderer) {
     OAuth.registerRenderer(electron,ipcRenderer);
     DownloadManager.registerRenderer(electron,ipcRenderer);
     Logging.registerRenderer(electron,ipcRenderer);
+    DirectConnect.registerRenderer(electron,ipcRenderer);
 
 
     electron.skipInstallUpdate = ()=> {

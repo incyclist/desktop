@@ -151,47 +151,56 @@ class NobleIpcBinding extends events.EventEmitter {
     }
 
 
-    async getServices(peripheral,services, characteristics) { 
+    async getServicesAndCharacteristics(peripheral,services, characteristics) { 
         //throw new Error('getServices not implemented')
         const {id} = peripheral
 
-        let found = this.connectedDevices.find(d => d.id === id && d.services && d.characteristics)
-        if ( found) {
-            const {services, characteristics} = found;
-            return Promise.resolve( {services, characteristics});
-            
-        }
-        else {
-            const res =  await this.getApi().getServices(id,services,characteristics)
+        const res =  await this.getApi().getServicesAndCharacteristics(id,services,characteristics)
 
-            if ( res.error ) 
-                throw res.error;
+        if ( res.error ) 
+            throw res.error;
 
-            if ( res.characteristics ) { 
-                res.characteristics.forEach(c => {
-                    c.emitter = new events.EventEmitter();
-                    c.emit = (event,...args) => { c.emitter.emit(event,...args) }
-                    c.on = (event, callback) => { c.emitter.on(event, callback) }
-                    c.off = (event, callback) => { c.emitter.off(event, callback) }
-                    c.removeAllListeners = (event) => { c.emitter.removeAllListeners(event) }
-                    c.once = (event, callback) => { c.emitter.once(event, callback) }
-                    c.subscribe = (callback) => { this.subscribe(peripheral,c,callback) }
-                    c.unsubscribe = (callback) => { this.unsubscribe(peripheral,c,callback) }
-                    c.read = (callback) => { this.read(peripheral,c,callback)}
-                    c.write = (data, withoutResponse, callback) => { this.write(peripheral,c,data,withoutResponse,callback)}
+        if ( res.characteristics ) { 
+            res.characteristics.forEach(c => {
+                c.emitter = new events.EventEmitter();
+                c.emit = (event,...args) => { c.emitter.emit(event,...args) }
+                c.on = (event, callback) => { c.emitter.on(event, callback) }
+                c.off = (event, callback) => { c.emitter.off(event, callback) }
+                c.removeAllListeners = (event) => { c.emitter.removeAllListeners(event) }
+                c.once = (event, callback) => { c.emitter.once(event, callback) }
+                c.subscribe = (callback) => { this.subscribe(peripheral,c,callback) }
+                c.unsubscribe = (callback) => { this.unsubscribe(peripheral,c,callback) }
+                c.read = (callback) => { this.read(peripheral,c,callback)}
+                c.write = (data, withoutResponse, callback) => { this.write(peripheral,c,data,withoutResponse,callback)}
 
-                })
-            }
-
-            let found = this.connectedDevices.find(d => d.id === id)
-            if (found) {
-                found.services = res.services;
-                found.characteristics = res.characteristics;
-            }
-            
-            return {services:res.services, characteristics:res.characteristics};
+            })
         }
 
+        let found = this.connectedDevices.find(d => d.id === id)
+        if (found) {
+            found.services = res.services;
+            found.characteristics = res.characteristics;
+        }
+        
+        return {services:res.services, characteristics:res.characteristics};
+
+    }
+
+    async getServices(peripheral,services) { 
+        //throw new Error('getServices not implemented')
+        const {id} = peripheral
+
+        const res =  await this.getApi().getServices(id,services)
+        if ( res.error ) 
+            throw res.error;
+
+
+        let found = this.connectedDevices.find(d => d.id === id)
+        if (found) {
+            found.services = res.services;
+        }
+        
+        return res.services;
     }
 
     init() {
@@ -203,11 +212,20 @@ class NobleIpcBinding extends events.EventEmitter {
                 peripheral.connectAsync = ()=> {
                     return this.connectDevice(peripheral); 
                 }
+                peripheral.discoverServicesAsync = (services)=> {
+                    return this.getServices(peripheral,services);
+                }
+
                 peripheral.discoverSomeServicesAndCharacteristicsAsync = (services,characteristics)=> {
-                    return this.getServices(peripheral,services,characteristics);
+                    return this.getServicesAndCharacteristics(peripheral,services,characteristics);
                 }
                 peripheral.disconnect = (cb) => {
                     return this.disconnectDevice(peripheral,cb)
+                }
+                peripheral.disconnectAsync = () => {
+                    return new Promise ( (done)=> { 
+                        this.disconnectDevice(peripheral,done) 
+                    })
                 }
 
                 peripheral.on = (event, callback) => { peripheral.emitter.on(event, callback) }              

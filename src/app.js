@@ -68,7 +68,6 @@ class IncyclistApp
                 // Someone tried to run a second instance, we should focus our window.
                 this.windowManager.focusActive()
             })
-            return;
         }
 
     }
@@ -93,8 +92,6 @@ class IncyclistApp
             const release = os.release()
             const mem = Math.round(os.totalmem()/1024/1024/1024)+' GB';
             const type = os.type();
-            //const osVersion = os.version()
-            //const machine = os.machine();
             this.logger.logEvent( {message:'os info',platform,arch,type,release,mem})
             
             this.setupCrashReporting()
@@ -128,8 +125,6 @@ class IncyclistApp
         ipcMain.on ('errorInWindow',(event,source,err)=>this.onCrash(event,source,err) )
 
     }
-
-
 
     async onReady() {
         while (!this.state.ready) {
@@ -452,7 +447,6 @@ class IncyclistApp
 
     onAppLoadFailed() {
         this.logger.logEvent({message:'incyclist event',event:'app-load-failed'});
-        // TODO
     }
 
     onAppReload() {

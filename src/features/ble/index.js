@@ -76,7 +76,6 @@ class BLEFeature extends Feature {
         const props = {}
 
 
-        // TODO: read bleServerDebug from settings and/or environment
         props.bleServerDebug = process.env.BLE_DEBUG;
 
         this.logger.logEvent({message:'init BLE feature'})
@@ -95,7 +94,6 @@ class BLEFeature extends Feature {
                 this.ble = new Noble(defaultBinding);
             }
             
-            //this.ble = new Noble(defaultBinding);
             const nop = ()=>{}
             if (this.ble) {
                 this.ble.setServerDebug = this.ble._bindings.setServerDebug || nop;
@@ -169,13 +167,6 @@ class BLEFeature extends Feature {
                 this.emit(eventName, peripheral)    
             })                
         }
-        /*
-        else if (eventName==='disconnect') {
-            this.emitter.on('discover-peripheral',(peripheral) => {
-                this.emit(eventName, peripheral)    
-            })                
-        }
-        */
         else {
             this.ble.on( eventName, (...args) =>{
                     const res = args.map(clone)
@@ -363,8 +354,6 @@ class BLEFeature extends Feature {
         const peripheral = this.peripherals.find( p => p.id===peripheralId);
         const characteristic = peripheral.characteristics.find( c => c.uuid===characteristicUUID);
         
-        let error = null;        
-
         if ( peripheral && characteristic) { 
 
             let b = data;
@@ -399,9 +388,6 @@ class BLEFeature extends Feature {
                             .catch( (err)=> {
                                 done(err)
                             })
-
-                        //console.log('~~~ BLEFeature WRITE RESUT',res)
-                        //return res
                     }
                     catch(err) {
                         done (err)
@@ -409,27 +395,9 @@ class BLEFeature extends Feature {
     
                 })
             }
-
-
-            /*
-
-            if (withoutResponse) {
-                return await characteristic.write( data,withoutResponse)                
-            }
-            else {
-                try {
-                    return  await characteristic.write( data,withoutResponse)
-                }
-                catch(err) {
-                    console.log ('~~~~ Index.js ERROR',err.message)
-                    throw err;
-                }
-            }
-            */
         }
         else { 
             throw new Error('device not found');
-            //ipcResponse(event.sender,'ble-write',callId, error);
         }        
     }
 
@@ -482,15 +450,10 @@ class BLEFeature extends Feature {
             ipcMain.on('ble-unsubscribe',(event, callId, id,characteristic) => ble.unsubscribeRequest(event, callId,id,characteristic));
             ipcMain.on('ble-read',(event, callId, id,characteristic) => ble.readRequest(event, callId,id,characteristic));
 
-            //ipcMain.on('ble-write',(event, callId, id,characteristic,data, withoutResponse) => ble.writeRequest(event, callId,id,characteristic,data,withoutResponse));
-
             ipcHandle('ble-write', this.write.bind(this), ipcMain)
             ipcHandleNoResponse('ble-setServerDebug',this.setServerDebug.bind(this),ipcMain)
             ipcHandleNoResponse('ble-pauseLogging',this.pauseLogging.bind(this),ipcMain)
             ipcHandleNoResponse('ble-resumeLogging',this.resumeLogging.bind(this),ipcMain)
-
-            // ipcMain.on('mq-unsubscribe',(event, callId, topic) => mq.removeSubscription(event, callId, topic));
-            // ipcMain.on('mq-publish',(event, callId, topic,message) => mq.publishMessage(event, callId, topic,message));
         }
     }
 

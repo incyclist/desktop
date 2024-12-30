@@ -42,10 +42,7 @@ const matches = (uuid1,uuid2) => {
  
     if (ul1.length<ul2.length && ul2.startsWith(ul1))
         return true
-    if (ul1.length>ul2.length && ul1.startsWith(ul2))
-        return true
-
-    return false;
+    return ul1.length>ul2.length && ul1.startsWith(ul2);
 
 }
 
@@ -160,7 +157,7 @@ class WinrtBindings extends events.EventEmitter {
                             const writer = fs.createWriteStream(fullPath)
                             response.data.pipe(writer);
                 
-                            let error = undefined;
+                            let error;
                 
                             writer.on('error', err => {
                                 writer.close();
@@ -333,21 +330,12 @@ class WinrtBindings extends events.EventEmitter {
     }
 
     connect(address) {
-        /*
-        if (this._deviceMap[address]) { 
-            this.emit('connect', this._deviceMap[address],null);
-            return;
-        }
-        */
-        
         this.logEvent({message: 'BLEServer connect', address});
         
         return this._sendRequest({ cmd: 'connect', 'address': address })
         .then(result => {
             this._deviceMap[address] = result;
             this.emit('connect', address, null);
-            //if (interruptScan)
-                //this.startScanning()
         })
         .catch(err => this.emit('connect', address, err));
 
@@ -420,9 +408,7 @@ class WinrtBindings extends events.EventEmitter {
             .then(result => {
                 
                 this.logEvent({message: 'BLEServer characteristics:', info: result.map( c => `${address} ${fromWindowsUuid(c.uuid)}  ${Object.keys(c.properties).filter(p => c.properties[p])}`)});
-                
 
-                // TODO filters
                 this.emit('characteristicsDiscover', address, service,
                     result.map(c => ({
                         uuid: fromWindowsUuid(c.uuid),
@@ -479,8 +465,6 @@ class WinrtBindings extends events.EventEmitter {
             .then(result => {
                 if (notify) {
                     this._subscriptions[result] = { address, service, characteristic };
-                } else {
-                    // TODO - remove from subscriptions
                 }
                 this.emit('notify', address, service, characteristic, notify);
             })
@@ -500,7 +484,7 @@ class WinrtBindings extends events.EventEmitter {
                     break;
     
                 case 'scanResult':
-                    isPeripheralValid = this.processScanResult(message, isPeripheralValid);
+                    this.processScanResult(message, isPeripheralValid);
                     break;
     
 
@@ -610,7 +594,7 @@ class WinrtBindings extends events.EventEmitter {
     
         }
         catch(err) {
-            this.logEvent({message:'error', fn:'_processMessage', error:err.message, message})
+            this.logEvent({message:'error', fn:'_processMessage', error:err.message, in:message})
         }
 
 
@@ -697,8 +681,8 @@ class WinrtBindings extends events.EventEmitter {
                             'discover',
                             uuid,
                             address,
-                            'public', // TODO address type
-                            true, // TODO connectable
+                            'public', 
+                            true, 
                             d.advertisement,
                             message.rssi);
                         if (this.scanProps) {

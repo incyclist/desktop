@@ -59,7 +59,7 @@
     "@playwright/test": "^1.49.1",
     "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",
-    "electron": "^33.0.1",
+    "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "electron-installer-dmg": "^3.0.0",
     "electron-installer-windows": "^3.0.0",

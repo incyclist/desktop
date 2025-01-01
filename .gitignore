@@ -12,6 +12,8 @@ test/out/
 target/
 dist/
 build/
+test-results/
+playwright-report/
 
 src/package-lock.json
 src/node_modules/

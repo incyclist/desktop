@@ -7,6 +7,7 @@
   "main": "src/main.js",
   "scripts": {
     "test": "jest",
+    "app-test": "playwright test --workers 1",
     "coverage": "jest --coverage",
     "start": "electron ./",
     "rebuild": "electron-rebuild",
@@ -55,6 +56,7 @@
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
     "@mapbox/node-pre-gyp": "^1.0.11",
+    "@playwright/test": "^1.49.1",
     "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",
     "electron": "^33.0.1",

@@ -6,7 +6,8 @@
   "description": "Incyclist Desktop App",
   "main": "src/main.js",
   "scripts": {
-    "test": "playwright test",
+    "test": "jest",
+    "app-test": "playwright test ",
     "coverage": "jest --coverage",
     "start": "electron ./",
     "rebuild": "electron-rebuild",

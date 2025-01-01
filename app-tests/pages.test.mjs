@@ -49,6 +49,7 @@ test('Navigate Pages', async () => {
     await test.step('Pairing page', async () => { 
         await expect(mainWindow.getByText('Paired Devices')).toBeVisible()
         await mainWindow.screenshot()
+        await expect(mainWindow.getByText('Skip')).toBeVisible()
     
     })
   

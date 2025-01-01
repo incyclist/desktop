@@ -1,9 +1,10 @@
 name: App Tests
 on:
-  branches:
-    - '**'
-  tags-ignore:
-    - '**'
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - '**'
   pull_request:
     branches: [ master ]
     paths-ignore:

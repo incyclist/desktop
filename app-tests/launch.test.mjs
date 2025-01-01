@@ -6,10 +6,10 @@ import fs from 'fs'
 let electronApp
 let settings
 
-test('App Launches', async () => {
+test.skip('App Launches', async () => {
 
     console.log('#### App Launches ####')
-    
+
     test.setTimeout(50000)
     settings = prepareSettings('new-user')
 

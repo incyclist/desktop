@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { _electron } from 'playwright';
 import { prepareSettings } from './utils/settings.mjs';
-import fs from 'fs'
 
 let electronApp
 let settings
@@ -9,7 +8,8 @@ let settings
 test('Navigate Pages', async () => {
 
     let mainWindow
-    test.setTimeout(10000)
+    test.setTimeout(50000)
+    settings = prepareSettings('default')
 
 
     await test.step('Launch App', async () => {

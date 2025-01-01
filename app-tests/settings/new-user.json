@@ -1,0 +1,7 @@
+{
+  "logRest": {
+    "url": "http://localhost:5001/api/v1/log",
+    "sendInterval": 10
+  },
+  "uuid": "TEST"
+}

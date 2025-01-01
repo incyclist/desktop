@@ -1,0 +1,67 @@
+{
+  "logRest": {
+    "url": "http://localhost:5001/api/v1/log",
+    "sendInterval": 10
+  },
+  "uuid": "TEST",
+  "devices": [],
+  "capabilities": [
+    {
+      "capability": "control",
+      "devices": [],
+      "disabled": false
+    },
+    {
+      "capability": "power",
+      "devices": [],
+      "disabled": false
+    },
+    {
+      "capability": "cadence",
+      "devices": [],
+      "disabled": false
+    },
+    {
+      "capability": "speed",
+      "devices": [],
+      "disabled": false
+    },
+    {
+      "capability": "heartrate",
+      "devices": [],
+      "disabled": false
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "ant",
+      "enabled": true
+    },
+    {
+      "name": "ble",
+      "enabled": true
+    },
+    {
+      "name": "serial",
+      "enabled": false,
+      "protocol": "Daum Classic"
+    },
+    {
+      "name": "tcpip",
+      "enabled": false,
+      "protocol": "Daum Premium",
+      "port": 51955
+    },
+    {
+      "name": "wifi",
+      "enabled": false,
+      "invisible": true
+    }
+  ],
+  "repo": {
+    "routes":"/tmp/routes",
+    "workouts":"/tmp/workouts",
+    "activities":"/tmp/activities"
+  }
+
+}

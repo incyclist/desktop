@@ -8,7 +8,7 @@ const __dirname = dirname(__filename);
 export const prepareSettings = (key) => {
 
     console.log('Dir',__dirname)
-    const fName = path.join(__dirname,`../settings/${key}/settings.json`)    
+    const fName = path.join(__dirname,`../settings/${key}.json`)    
 
     const target = path.join(os.tmpdir(), 'settings.json')
 

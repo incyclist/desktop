@@ -10,6 +10,7 @@ on:
     paths-ignore:
       - 'README.MD'
       - '.github/**'
+  workflow_dispatch:
 
 jobs:
   test:
@@ -35,8 +36,8 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    - name: Install Playwright Browsers
-      run: npx playwright install --with-deps
+    #- name: Install Playwright Browsers
+    #  run: npx playwright install --with-deps
 
     - name: Run Playwright tests
       run: npm run app-test

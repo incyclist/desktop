@@ -5,6 +5,10 @@ import { prepareSettings } from './utils/settings.mjs';
 let electronApp
 let settings
 
+const sleep = (ms) => {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 test('Navigate Pages', async () => {
     console.log('#### Page navigation ####')
 
@@ -54,8 +58,12 @@ test('Navigate Pages', async () => {
     })
   
     await test.step('main page', async () => { 
+        await expect(mainWindow.getByText('Skip')).toBeVisible()
         mainWindow.getByText('Skip').click()
+        
+        await sleep(1000)
         await mainWindow.screenshot()
+
     })
 
 

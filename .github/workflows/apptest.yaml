@@ -44,7 +44,6 @@ jobs:
 
     - name: Show directory content
       run: | 
-        ls -la test-result
         ls -la
 
 

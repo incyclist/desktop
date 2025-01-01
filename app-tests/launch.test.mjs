@@ -15,7 +15,7 @@ test.skip('App Launches', async () => {
 
     electronApp = await _electron.launch({
         args: ['./'],
-        recordVideo: {dir: 'test-results/videos'}    
+        recordVideo: {dir: 'test-results'}    
     });
 
 

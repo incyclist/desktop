@@ -17,12 +17,7 @@ test('Navigate Pages', async () => {
             args: ['./'],
             recordVideo: {dir: 'test-results/videos'}    
         });
-    
-        settings = prepareSettings('default')
-        console.log(settings)
-
-        const data = fs.readFileSync(settings,'utf-8')
-        console.log(data)
+   
     
       // Evaluation expression in the Electron context.
         await electronApp.evaluate(async ({ app }) => {
@@ -91,5 +86,6 @@ test('Navigate Pages', async () => {
 });
 
 test.afterAll(async () => {
-    await electronApp.close();
+    if (electronApp)
+        await electronApp.close();
 });

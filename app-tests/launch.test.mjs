@@ -39,7 +39,6 @@ test('App Launches', async () => {
 });
 
 test.afterAll(async () => {
-    await electronApp.close();
-    if (settings)
-        fs.unlinkSync(settings)  
+    if (electronApp)
+        await electronApp.close();
 });

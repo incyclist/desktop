@@ -7,12 +7,17 @@ let electronApp
 let settings
 
 test('App Launches', async () => {
+
+    console.log('#### App Launches ####')
+    
+    test.setTimeout(50000)
+    settings = prepareSettings('new-user')
+
     electronApp = await _electron.launch({
         args: ['./'],
         recordVideo: {dir: 'test-results/videos'}    
     });
 
-    settings = prepareSettings('new-user')
 
   // Evaluation expression in the Electron context.
     await electronApp.evaluate(async ({ app }) => {
@@ -41,4 +46,6 @@ test('App Launches', async () => {
 test.afterAll(async () => {
     if (electronApp)
         await electronApp.close();
+    console.log('#### App Launches Done ####')
+
 });

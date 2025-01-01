@@ -6,6 +6,7 @@ let electronApp
 let settings
 
 test('Navigate Pages', async () => {
+    console.log('#### Page navigation ####')
 
     let mainWindow
     test.setTimeout(50000)
@@ -88,4 +89,6 @@ test('Navigate Pages', async () => {
 test.afterAll(async () => {
     if (electronApp)
         await electronApp.close();
+    console.log('#### Page navigation done ####')
+
 });

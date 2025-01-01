@@ -20,7 +20,7 @@ test('Navigate Pages', async () => {
     await test.step('Launch App', async () => {
         electronApp = await _electron.launch({
             args: ['./'],
-            recordVideo: {dir: 'test-results/videos'}    
+            recordVideo: {dir: 'test-results'}    
         });
    
     
@@ -60,7 +60,7 @@ test('Navigate Pages', async () => {
     await test.step('main page', async () => { 
         await expect(mainWindow.getByText('Skip')).toBeVisible()
         mainWindow.getByText('Skip').click()
-        
+
         await sleep(1000)
         await mainWindow.screenshot()
 

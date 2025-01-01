@@ -207,6 +207,16 @@ class AppSettings {
     }
     
     getSettingsFileName() {
+
+        if (process.env.SETTINGS_FILE) {
+            return process.env.SETTINGS_FILE
+            
+        }
+        if (process.env.CONFIG_FILE) {
+            return process.env.CONFIG_FILE
+            
+        }
+
         try {
             const baseDir =  this.environment==='dev'  ? path.join(__dirname,'../.settings') : getAppDirectory();
             return   path.join(baseDir,'settings.json')

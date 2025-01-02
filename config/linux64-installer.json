@@ -12,6 +12,7 @@
             "output": "../../installer/linux/x64"
         },
         "linux": {
+            "icon": "res/icon_256.png",
             "category": "Games",
             "maintainer": "Guido Doumen"
         },

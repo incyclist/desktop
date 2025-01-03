@@ -135,6 +135,7 @@ if (os.platform()==='win32') {
     lnk.sync(path.join(baseDir,'./scripts'),buildDir)
 }
 else if (os.platform()==='darwin') {
+    try { fs.cpSync(path.join(baseDir,'./config/forge.config.js'),path.join(buildDir,'./forge.config.js')) } catch {}
     console.log('copying node modules  ...')
     try { fs.cpSync(path.join(baseDir,'./node_modules'),path.join(buildDir,'./node_modules'), {recursive: true}) } catch {}
     console.log('... done')

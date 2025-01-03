@@ -7,12 +7,15 @@
   "main": "src/main.js",
   "scripts": {
     "test": "jest",
-    "app-test": "playwright test --workers 1",
     "coverage": "jest --coverage",
-    "start": "electron-forge start",
+    "app-test": "playwright test --workers 1",
+    "start": "electron ./",
+    "forge-start": "electron-forge start",
     "package": "electron-forge package",
+   
     "make": "electron-forge make",
     "make-linux": "electron-builder --linux",
+    "make-mas": "BUILD_TARGET=appstore && electron-forge make",
     "installer-linux64": "npm run prepare-build ./config/linux64-installer.json && cd ./release/linux && npm run make-linux",
     "prepare-build": "node ./scripts/prepare-build"
   },
@@ -41,6 +44,7 @@
     "mqtt": "^5.10.1",
     "request": "^2.88.2",
     "serialport": "^10.5.0",
+    "update-electron-app": "^3.1.0",
     "usb": "^2.14.0",
     "uuid": "^10.0.0",
     "yauzl": "^3.2.0"
@@ -48,6 +52,8 @@
   "devDependencies": {
     "@electron-forge/cli": "^7.6.0",
     "@electron-forge/maker-deb": "^7.6.0",
+    "@electron-forge/maker-dmg": "^7.6.0",
+    "@electron-forge/maker-pkg": "^7.6.0",
     "@electron-forge/maker-rpm": "^7.6.0",
     "@electron-forge/maker-squirrel": "^7.6.0",
     "@electron-forge/maker-zip": "^7.6.0",
@@ -59,6 +65,7 @@
     "@playwright/test": "^1.49.1",
     "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",
+    "dotenv": "^16.4.7",
     "electron": "^33.0.1",
     "electron-builder": "^25.1.8",
     "electron-packager": "^16.0.0",

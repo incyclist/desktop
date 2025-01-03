@@ -12,6 +12,7 @@ test/out/
 target/
 dist/
 build/
+out/
 test-results/
 playwright-report/
 

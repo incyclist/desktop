@@ -16,6 +16,7 @@ module.exports = {
   makers: [
     {
       name: '@electron-forge/maker-snap',     
+      platforms: ['linux'],
       config: {
         "category":"Game",
         "confinement":"devmode",

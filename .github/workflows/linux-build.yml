@@ -24,7 +24,10 @@ jobs:
         SECRET_FILE: ${{ secrets.SECRET_FILE }}
       run: |
         echo $SECRET_FILE > ./src/secrets.json
-        
+
+    - name: Install snapcraft
+      run: sudo snap install snapcraft --classic        
+      
     - name: install libusb
       run: |
         sudo apt-get update

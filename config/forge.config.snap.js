@@ -21,7 +21,7 @@ module.exports = {
         "category":"Game",
         "base": "core20",
         "confinement":"devmode",
-        "plugs" : [
+        "appPlugs" : [
             "bluez",
             "bluetooth-control",
             "alsa",

@@ -45,16 +45,16 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - run: |
        npm install       
-       npm run installer-linux64
+       npm run make-linux
     
     - uses: actions/upload-artifact@v4
       with:
         name: AppImage
         path: |
-          ./installer/linux/x64/*.AppImage
-          ./installer/linux/x64/latest-linux.yml
+          ./out/make/*.AppImage
+          ./out/make/latest-linux.yml
 
     - uses: actions/upload-artifact@v4
       with:
         name: snap
-        path: ./installer/linux/x64/*.snap
+        path: ./out/make/*.snap

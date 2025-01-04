@@ -1,41 +1,68 @@
 {
-    "build" : {
-        "publish": {
-            "provider": "generic",
-            "url": "https://updates.incyclist.com/download/app/latest/linux/x64"
-        },
-        "appId": "incyclist",
-        "productName": "Incyclist",
-        "nodeGypRebuild": false,
-        "directories": {
-            "app": "./",
-            "output": "../../installer/linux/x64"
-        },
-        "linux": {
-            "icon": "res/icon_256.png",
-            "category": "Games",
-            "maintainer": "Guido Doumen"
-        },
-        "files": [
+    "beforePack": "scripts/update-web-bundle.js",
+    "publish": {
+        "provider": "generic",
+        "url": "https://updates.incyclist.com/download/app/latest/linux/x64"
+    },
+    "appId": "com.incyclist.desktop",
+    "productName": "Incyclist",
+    "nodeGypRebuild": false,
+    "directories": {
+        "app": "./",
+        "output": "out/make",
+        "buildResources": "res"
+    },
+    "linux": {
+        "icon": "res/icon_256.png",
+        "category": "Games;Sports",
+        "maintainer": "Guido Doumen",
+        "desktop":   {
+            "name": "Incyclist"
+        } ,
+        "target": ["AppImage","snap","zip"]
+    },
+    "snap": {   
+        "category":"Game",
+        "confinement":"devmode"
+    },
 
-            "**/*",
-            "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
-            "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
-            "!**/node_modules/*.d.ts",
-            "!**/node_modules/.bin",
-            "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
-            "!.editorconfig",
-            "!**/._*",
-            "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
-            "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
-            "!**/{appveyor.yml,.travis.yml,circle.yml}",
-            "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}",
-            {           
-                "from": "res",
-                "to": "build",
-                "filter": ["**/*"]
-                }
+    "files": [
 
-        ]
-    }
+        "**/*",
+        "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+        "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+        "!**/node_modules/*.d.ts",
+        "!**/node_modules/.bin",
+        "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+        "!.editorconfig",
+        "!**/._*",
+        "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+        "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+        "!**/{appveyor.yml,.travis.yml,circle.yml}",
+        "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}",
+        "!**/bin/*",
+        "!**/.github/*",
+        "!**/app-tests/*",
+        "!**/certs/*",
+        "!**/config/*",
+        "!**/coverage/*",
+        "!**/entitlements/*",
+        "!**/profiles/*",
+        "!**/release/*",
+        "!**/scripts/*",
+        "!**/test/*",
+        "!**/test-results/*",
+        "!**/testdata/*",
+        "!**/.gitignore",
+        "!**/playwright.config.ts",
+        "!**/forge.config.js",
+        "!**/README.MD",
+
+        {           
+            "from": "res",
+            "to": "build",
+            "filter": ["**/*"]
+            }
+
+    ]
 }

@@ -12,12 +12,9 @@
     "start": "electron ./",
     "forge-start": "electron-forge start",
     "package": "electron-forge package",
-   
     "make": "electron-forge make",
-    "make-linux": "electron-builder --linux",
-    "make-mas": "BUILD_TARGET=appstore && electron-forge make",
-    "installer-linux64": "npm run prepare-build ./config/linux64-installer.json && cd ./release/linux && npm run make-linux",
-    "prepare-build": "node ./scripts/prepare-build"
+    "make-linux": "electron-builder --linux --config ./config/linux64-installer.json",
+    "make-mas": "BUILD_TARGET=appstore && electron-forge make"
   },
   "repository": {
     "type": "git",

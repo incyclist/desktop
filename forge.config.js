@@ -1,6 +1,5 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
-
 const config = require(`./config/forge.config.${process.env.BUILD_TARGET??'incyclist'}`)
 
 const forge =  {

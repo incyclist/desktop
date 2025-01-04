@@ -1,8 +1,12 @@
-const { FusesPlugin } = require('@electron-forge/plugin-fuses');
-const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+const updateWebBundle = require('./scripts/update-web-bundle')
 
 module.exports = {
   packagerConfig: {
+    hooks: {
+      beforePack: async (options) => { 
+        await updateWebBundle()        
+      }
+    },
     asar: true,
     appBundleId: 'com.incyclist.desktop',
     name: 'Incyclist',
@@ -30,7 +34,7 @@ module.exports = {
       }      
     },
     icon: 'res/icons/incyclist',
-    ignore: [ '^/.github','^/.gitignore', '^/app-tests','^/certs', '^/entitlements','^/profiles','^/bin','^/installer','^/release','scripts','^/config','^/test','^/testdata','README.MD','electron-builder.yml','^/.env']
+    ignore: [ '^/.github','^/.gitignore', '^/app-tests','^coverage','^/certs', '^/entitlements','^/profiles','^/bin','^/installer','^/release','scripts','^/config','^/test','^/test-results','^/testdata','README.MD','electron-builder.yml','^/.env']
   },
   rebuildConfig: {},
   makers: [

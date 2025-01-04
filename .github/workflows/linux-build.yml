@@ -45,7 +45,7 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - run: |
        npm install       
-       npm run make-linux
+       npm run make-snap
     
     - uses: actions/upload-artifact@v4
       with:

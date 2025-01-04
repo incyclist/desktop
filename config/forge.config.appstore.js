@@ -1,4 +1,4 @@
-const updateWebBundle = require('./scripts/update-web-bundle')
+const updateWebBundle = require('../scripts/update-web-bundle')
 
 module.exports = {
   packagerConfig: {

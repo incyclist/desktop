@@ -14,7 +14,8 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "make-linux": "electron-builder --linux --config ./config/linux64-installer.json",
-    "make-mas": "BUILD_TARGET=appstore && electron-forge make"
+    "make-mas": "BUILD_TARGET=appstore && electron-forge make",
+    "make-snap": "BUILD_TARGET=snap && electron-forge make"
   },
   "repository": {
     "type": "git",
@@ -52,6 +53,7 @@
     "@electron-forge/maker-dmg": "^7.6.0",
     "@electron-forge/maker-pkg": "^7.6.0",
     "@electron-forge/maker-rpm": "^7.6.0",
+    "@electron-forge/maker-snap": "^7.6.0",
     "@electron-forge/maker-squirrel": "^7.6.0",
     "@electron-forge/maker-zip": "^7.6.0",
     "@electron-forge/plugin-auto-unpack-natives": "^7.6.0",

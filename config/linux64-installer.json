@@ -18,26 +18,7 @@
         "desktop":   {
             "name": "Incyclist"
         } ,
-        "target": ["AppImage","snap","zip"]
-    },
-    "snap": {   
-        "category":"Game",
-        "confinement":"devmode",
-        "buildPackages": ["libusb"],
-        "plugs" : [
-            "bluez",
-            "bluetooth-control",
-            "alsa",
-            "audio-playback",
-            "cpu-control",
-            "display-control",
-            "locale-control",
-            "network",
-            "network-bind",
-            "home",
-            "serial-port",
-            "removable-media" 
-        ]
+        "target": ["AppImage"]
     },
 
     "files": [

@@ -19,6 +19,7 @@ module.exports = {
       platforms: ['linux'],
       config: {
         "category":"Game",
+        "base": "core22",
         "confinement":"devmode",
         "plugs" : [
             "bluez",

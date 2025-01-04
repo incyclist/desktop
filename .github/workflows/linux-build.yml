@@ -27,7 +27,7 @@ jobs:
 
     - name: Install snapcraft
       run: sudo snap install snapcraft --classic        
-      
+
     - name: install libusb
       run: |
         sudo apt-get update
@@ -49,6 +49,8 @@ jobs:
     - run: |
        npm install       
        npm run make-snap
+
+       /snap/bin/snapcraft snap --output=/home/runner/work/desktop/desktop/out/make/snap/x64/test.snap
     
     - uses: actions/upload-artifact@v4
       with:

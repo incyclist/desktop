@@ -18,7 +18,6 @@ module.exports = {
       name: '@electron-forge/maker-snap',     
       platforms: ['linux'],
       config: {
-        "category":"Game",
         "base": "core20",
         "confinement":"devmode",
         "appPlugs" : [

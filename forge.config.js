@@ -1,16 +1,23 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
-const config = require(`./config/forge.config.${process.env.BUILD_TARGET??'incyclist'}`)
+const os = require('os')
+const platform = os.platform()
+
+let config;
+
+if (platform==='win32')
+  config = require(`./config/forge.config.windows`)
+else if (platform==='linux') 
+  config = require(`./config/forge.config.linux.snap`)
+else if (platform==='darwin') 
+  config = require(`./config/forge.config.${platform}.${process.env.BUILD_TARGET??'unsigned'}`)
 
 const forge =  {
   packagerConfig: config.packagerConfig,
   rebuildConfig: {},
   makers: config.makers,
+  hooks: config.hooks,
   plugins: [
-    {
-      name: '@electron-forge/plugin-auto-unpack-natives',
-      config: {},
-    },    
   // Fuses are used to enable/disable various Electron functionality
     // at package time, before code signing the application
     new FusesPlugin({

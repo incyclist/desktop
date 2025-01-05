@@ -94,6 +94,6 @@ const run = async () => {
     await updateWebBundle('./build')
 }
 
-exports.default = run
+module.exports = run
 
 

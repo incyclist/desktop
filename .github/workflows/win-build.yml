@@ -60,13 +60,11 @@ jobs:
       run: |
         mkdir .\installer       
         npm install       
-        npm run rebuild
-        npm run package-win64
-        npm run installer-win64
+        npm run make
   
     - uses: actions/upload-artifact@v4
       with:
         name: package
-        path: ./installer/win64/
+        path: ./out/make/squirrel.windows/x64/
 
   

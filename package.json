@@ -14,8 +14,8 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "make-linux": "electron-builder --linux --config ./config/linux64-installer.json",
-    "make-mas": "export BUILD_TARGET=appstore && electron-forge make",
-    "make-snap": "export BUILD_TARGET=snap && electron-forge make"
+    "make-mac-appstore": "export BUILD_TARGET=appstore && electron-forge make",
+    "make-mac-dist": "export BUILD_TARGET=incyclist && electron-forge make"
   },
   "repository": {
     "type": "git",

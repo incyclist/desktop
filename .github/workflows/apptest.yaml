@@ -4,32 +4,32 @@ on:
     branches:
       - '**'
     paths-ignore:
-      - 'README.MD'
       - '.gitignore'
       - '.github/**'
-      - 'bin'
-      - 'config'
-      - 'entitlements'
-      - 'res'
-      - 'scripts'
-      - 'test'
-      - 'testdata'
+      - 'bin/**'
+      - 'config/**'
+      - 'entitlements/**'
+      - 'res/**'
+      - 'scripts/**'
+      - 'test/**'
+      - 'testdata/**'
+      - 'README.MD'
       - 'forge.config.js'
     tags-ignore:
       - '**'
   pull_request:
     types: [opened,reopened]
     paths-ignore:
-      - 'README.MD'
       - '.gitignore'
       - '.github/**'
-      - 'bin'
-      - 'config'
-      - 'entitlements'
-      - 'res'
-      - 'scripts'
-      - 'test'
-      - 'testdata'
+      - 'bin/**'
+      - 'config/**'
+      - 'entitlements/**'
+      - 'res/**'
+      - 'scripts/**'
+      - 'test/**'
+      - 'testdata/**'
+      - 'README.MD'
       - 'forge.config.js'
   workflow_dispatch:
 

@@ -32,4 +32,5 @@ bin/*/ergoapp.node
 nohup.out
 config/setttings.json
 .env
+profiles
 electron-windows-sign.log

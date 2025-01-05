@@ -3,6 +3,18 @@ on:
   push:
     branches:
       - '**'
+    paths-ignore:
+      - 'README.MD'
+      - '.gitignore'
+      - '.github/**'
+      - 'bin'
+      - 'config'
+      - 'entitlements'
+      - 'res'
+      - 'scripts'
+      - 'test'
+      - 'testdata'
+      - 'forge.config.js'
     tags-ignore:
       - '**'
   pull_request:

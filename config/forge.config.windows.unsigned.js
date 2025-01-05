@@ -26,7 +26,13 @@ module.exports = {
     {
       name: '@electron-forge/maker-squirrel',
       config: {
+        remoteReleases: process.env.RELEASE_SERVER,
+        
         authors: ["Guido Doumen", "Jeroen Doumen"],
+        windowsSign:{
+          certificateFile: './certs/installer.pfx',
+          certificatePassword: process.env.CERTIFICATE_PASSWORD,
+        },
         setupIcon:'res/icons/incyclist.ico'
       }
     }

@@ -56,9 +56,11 @@ jobs:
     - name: Add msbuild to PATH
       uses: microsoft/setup-msbuild@v2
 
-    - name: Build Instakker
-      run: |
-        mkdir .\installer       
+    - name: Build Installer
+      env:
+        RELEASE_SERVER: ${{ secrets.RELEASE_SERVER }}
+      run: |        
+        $env:BUILD_TARGET=dist
         npm install       
         npm run make
   

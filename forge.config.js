@@ -5,12 +5,14 @@ const platform = os.platform()
 
 let config;
 
-if (platform==='win32')
+if (platform==='win32' && process.env.BUILD_TARGET==='dist')
   config = require(`./config/forge.config.windows`)
+else if (platform==='win32')
+  config = require(`./config/forge.config.windows.unsigned`)
 else if (platform==='linux') 
   config = require(`./config/forge.config.linux.snap`)
 else if (platform==='darwin') 
-  config = require(`./config/forge.config.${platform}.${process.env.BUILD_TARGET??'unsigned'}`)
+  config = require(`./config/forge.config.darwin.${process.env.BUILD_TARGET??'unsigned'}`)
 
 const forge =  {
   packagerConfig: config.packagerConfig,

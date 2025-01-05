@@ -1,12 +1,13 @@
 const updateWebBundle = require('../scripts/update-web-bundle')
 
 module.exports = {
+  hooks: {
+    prePackage: async (options) => { 
+      await updateWebBundle()        
+    }
+  },
+
   packagerConfig: {
-    hooks: {
-      beforePack: async (options) => { 
-        await updateWebBundle()        
-      }
-    },
     asar: true,
     appBundleId: 'com.incyclist.desktop',
     name: 'Incyclist',

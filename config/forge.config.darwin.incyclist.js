@@ -14,7 +14,7 @@ module.exports = {
     osxSign: {
       platform: 'darwin',      
       provisioningProfile: 'profiles/Distribution.provisionprofile',
-      identity: 'Developer ID Application: Guido Doumen (33ZL4TD87Q)',
+      identity: `Developer ID Application: ${process.env.APPLE_DEVELOPER} (${process.env.APPLE_TEAM_ID})`,
       optionsForFile: (filePath) => {
         let entitlements;
         
@@ -45,7 +45,8 @@ module.exports = {
     {
       name: '@electron-forge/maker-dmg',
       config: {
-        format: 'ULFO'
+        format: 'ULFO',
+        icon: 'res/icons/incyclist.icns'
       },
       platforms: ['darwin'],
     },

@@ -6,7 +6,6 @@ const package_json = require('../package.json')
 const os = require('os');
 const { ZipData } = require('../src/modules/zip')
 const readline = require('node:readline');
-
 const { version,name} = package_json
 
 function getReactVersionFromUser() {
@@ -24,7 +23,7 @@ function getReactVersionFromUser() {
 }
 
 async function copyFromServer(url,targetDir) {
-
+    console.log('Copy web bundle from server to',targetDir)
     axios.defaults.headers.common = { "X-uuid":"update-react","X-arch":os.arch(), "X-platform":os.platform(), "user-agent": `update-react/${version} (${os.platform()};${os.arch()};${os.release()})`};
 
     console.log('checking version ...')
@@ -91,5 +90,10 @@ function updateWebBundle(targetDir) {
     
 }
 
-module.exports = updateWebBundle
+const run = async () => {
+    await updateWebBundle('./build')
+}
+
+module.exports = run
+
 

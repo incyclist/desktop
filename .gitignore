@@ -12,6 +12,7 @@ test/out/
 target/
 dist/
 build/
+out/
 test-results/
 playwright-report/
 
@@ -30,3 +31,6 @@ app/.settings/
 bin/*/ergoapp.node
 nohup.out
 config/setttings.json
+.env
+profiles
+electron-windows-sign.log

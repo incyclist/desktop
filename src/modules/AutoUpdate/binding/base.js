@@ -7,6 +7,7 @@ class UpdatehandlerBase extends EventEmitter {
         super();
         if (server)
             this.feedURL = `${server}/download/app/latest/${getPlatform()}`
+        this.logger = logger;
     }
 
     async checkForUpdates() {

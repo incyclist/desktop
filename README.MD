@@ -53,66 +53,80 @@ _INCYCLIST_API_KEY_ Incyclist API Key
 
 Once the app is started, you can press CTRL+SHIFT+ALT+I to open the Electron Developer Tools.
 
-### Problems
-
-In case you get error like this: 
-    bindings.node'
-    was compiled against a different Node.js version using
-    NODE_MODULE_VERSION 64. This version of Node.js requires
-    NODE_MODULE_VERSION 73. Please try re-compiling or re-installing
-    ...
-
-Steps:
-
-    If you have not installed electron-rebuild just install it with the command: npm i -D electron-rebuild
-    Remove from the node-modules folder the serialport and @serialport folders.
-    Remove the file packages-lock.json
-    Run npm i to install non-installed modules
-    And finally run ./node_modules/.bin/electron-rebuild
-
-It is very important to run ./node_modules/.bin/electron-rebuild directly after npm i.
-
-Source: https://stackoverflow.com/a/52796884
 
 ## Building the Installers
 
 
 ### Windows
 
-#### Configure the build
+#### Unsigned Build
+` > npm run make`
 
-You need to configure the build ( filename, signing settings, auto-update URL) in the file [./config/win64-installer.json](./config/win64-installer.json) (64 Bit) or [./config/win32-installer.json](./config/win32-installer.json)
+#### Signed Build for distribution 
 
-#### Create the packager
-` > npm run package-win64` (64Bit Windows)<br>
-or<br> 
-` > npm run package-win32` (32Bit Windows)
+Before running the build, you need to setup the information so that the script can properly sign:
+- store your certificate (pfx file) in ./certs/installer.pfx
+- set the environment variable _CERTIFICATE_PASSWORD_ to the password of the certificate
 
+` > npm run make-win-dist`
 
-#### Create the (signed) installer
-` > npm run installer-win64` (64Bit Windows)<br>
-or<br> 
-` > npm run installer-win32` (32Bit Windows)
-
-#### Sign the app
-
-
-
-`node_modules\electron-installer-windows\vendor\squirrel\signtool.exe timestamp /tr http://timestamp.comodoca.com .\installer\win64\incyclist-`{version}`-setup.exe `
-
+In both cases, the result of the build can be found in [./out/make/squirrel.windows/x64/](./out/make/squirrel.windows/x64/)
 
 ### Mac
 
-#### Create the packager
-` > npm run package-mac`
+There are three different build targets for Mac: 
 
-#### Create the (signed) installer
-` > npm run installer-mac`
+- An unsigned build you can use for local development and testing/debugging
+- A signed and notarized build that can be used to ditribute the app outside of the Mac App Store
+- A signed build that can be uploaded to the Mac App Store
+
+The process of signing and requirements for local and App Store distributions is explained [here](https://github.com/thebinarysearchtree/forge) and [here](https://github.com/electron/osx-sign), including how to setup the certificates in provisioning profiles that are required for these build targets
+
+In all cases, the result of the build can be found in [./out/make](./out/make)
+
+#### Unsigned Build
+` > npm run make`
+
+#### Signed Build for distribution outside AppStore
+
+Before running the build, you need to setup the information so that the script can properly sign. This requires the following steps to be completed:
+
+1) Create an application in the Apple developer portal. 
+
+2) If not done, create an "App Specific password" as described [here](https://docs.digicert.com/en/software-trust-manager/threat-detection/apple-notarization/notarize-apple-binaries.html)
+
+3) Create, download and install a "Developer ID Application" certificate
+
+4) Create a provisionig profile with your "Developer ID Application" Certificate and the application you have created in Step 1.  Dwnload and install the provisioning profile
+
+5) copy the provisioning profile to [./profiles/Distribution.provisionprofile](./profiles/Distribution.provisionprofile)
+
+6) Define the following environment variables:
+- _APPLE_ID_:  appleId: usually the email address you used to create your Apple account.
+
+- _APPLE_PASSWORD_: the password you have created in step 2
+
+- _APPLE_TEAM_ID_: that set of characters inside the brackets at the end of your identity name.
+
+- _APPLE_DEVELOPER_: The name ( "<FirstName> <LastName>") of the developer registered in the certificate
+
+Once these steps are done, you can trigger the build using:
+` > npm run make-mac-dist`
 
 
+#### Signed Build for AppStore distribution
+
+This is currently work in progress. I need to implement and verify the process myself and once that is done, I will describe how you could publish your own flavour of Incyclist in the Mac AppStore
+
+` > npm run make-mac-appstore`
 
 ### Linux
 
-#### Create the installer (includes packaging)
-` > npm run installer-linux64`
+#### Snap Build
+` > npm run make`
+
+#### AppImage Build
+` > npm run make-linux`
+
+In both cases, the result of the build can be found in [./out/make](./out/make)
 

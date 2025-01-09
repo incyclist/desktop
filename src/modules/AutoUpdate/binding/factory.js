@@ -2,6 +2,7 @@ const os = require('os');
 
 const WindowsBinding = require('./windows')
 const LinuxBinding = require('./linux');
+const MacBinding = require('./mac');
 
 class UpdaterFactory {
 
@@ -23,6 +24,8 @@ class UpdaterFactory {
             return  new WindowsBinding( serverUrl,logger)
         else if (os.platform()==='linux' && process.env.APPIMAGE ) 
             return new LinuxBinding(serverUrl,logger)
+        else if (os.platform()==='darwin' ) 
+            return new MacBinding(serverUrl,logger)
 
     }
 

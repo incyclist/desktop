@@ -129,7 +129,7 @@ class AutoUpdate extends EventEmitter {
 
 
     updateAppForNextLaunch() {
-        this.logger.logEvent ({message:'download app update' })
+        this.logger.logEvent ({message:'download app update for next launch' })
 
         if (this.autoUpdater) {
             this.skipUpdate()
@@ -142,6 +142,10 @@ class AutoUpdate extends EventEmitter {
         if (this.autoUpdater) {
             this.autoUpdater.once('app-downloaded', ()=>{this.onAppUpdateDownloaded()})
             this.autoUpdater.once('app-quit-required', ()=>{ this.emit('app-relaunch')})
+            this.autoUpdater.once('error', ( err)=>{ 
+                this.logger.logEvent( {message:'app update error',error:err.message})
+                this.skipUpdate()
+            })
         }
 
     }

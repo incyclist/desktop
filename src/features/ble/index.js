@@ -370,7 +370,7 @@ class BLEFeature extends Feature {
                 catch(err) {}
     
     
-                this.logger.logEvent( {message:'write: buffer is not a Buffer',buffer:bufferStr,hex:b.toString('hex'), type:typeof data})
+                //this.logger.logEvent( {message:'write: buffer is not a Buffer',buffer:bufferStr,hex:b.toString('hex'), type:typeof data})
             }
 
             if (withoutResponse===true) {

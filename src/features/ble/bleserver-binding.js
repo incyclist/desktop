@@ -343,6 +343,7 @@ class WinrtBindings extends events.EventEmitter {
     }
 
     async reconnect(address, retries=5) {
+        this.logEvent({message: 'BLEServer reconnect', address});
 
         const connectAttempt = () => {
             return new Promise ( resolve => {
@@ -559,6 +560,10 @@ class WinrtBindings extends events.EventEmitter {
         
                                 if (this._deviceMap[address] == message.device) {
                                     this._deviceMap[address] = null;
+
+                                    if (!processed)
+                                        this.logEvent( {message:'BLEserver in:', type:'disconnect', device:message.device});
+            
                                     processed = true;
                                     this.emit('disconnect', address);
                                 }                                    

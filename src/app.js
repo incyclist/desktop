@@ -37,11 +37,17 @@ class IncyclistApp
     constructor() {
         // initialize minimum required fot single instance check
         // all other initialization can be done in start())
+
+        
         app.incyclistApp = this
         app.allowRendererProcessReuse=false;  
         if (process.platform==='darwin') {
             Menu.setApplicationMenu(null);
         }
+        if (process.platform==='linux') {
+            app.commandLine.appendSwitch('no-sandbox');            
+        }
+
 
         this.environment  = process.env.ENVIRONMENT || "prod";
         this.session = gnerateUUID();

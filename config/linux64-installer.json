@@ -45,7 +45,7 @@
         "!**/entitlements/*",
         "!**/profiles/*",
         "!**/release/*",
-        "!**/out/*",
+        "!/out/*",
         "!**/scripts/*",
         "!**/test/*",
         "!**/test-results/*",

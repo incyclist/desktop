@@ -38,7 +38,7 @@
     "fluent-ffmpeg": "^2.1.2",
     "gd-eventlog": "^0.1.24",
     "incyclist-ant-plus": "^0.3.1",
-    "incyclist-devices": "^2.2.8",
+    "incyclist-devices": "^2.3.9",
     "mp4frag": "^0.7.0",
     "mqtt": "^5.10.1",
     "request": "^2.88.2",
@@ -66,14 +66,12 @@
     "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",
     "dotenv": "^16.4.7",
-    "electron": "^33.3.1",
+    "electron": "^34.0.0",
     "electron-builder": "^25.1.8",
-    "electron-packager": "^16.0.0",
-    "fs-extra": "^11.1.1",
+    "fs-extra": "^11.3.0",
     "jest": "^29.6.2",
     "lnk": "^1.1.0",
-    "node-addon-api": "^8.2.2",
-    "node-gyp": "^10.0.1"
+    "node-addon-api": "^8.2.2"
   },
   "jest": {
     "testEnvironment": "node",

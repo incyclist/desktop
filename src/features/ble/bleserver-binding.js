@@ -112,7 +112,7 @@ class WinrtBindings extends events.EventEmitter {
         return fileName
     }
 
-    download(overwrite=false) {
+    async download(overwrite=false) {
 
         const platform = os.platform();
         if ( platform !== 'win32' ) {             
@@ -440,22 +440,6 @@ class WinrtBindings extends events.EventEmitter {
             return;
         }
 
-        try {
-            const keys = Object.keys(this._subscriptions);
-            const existing = keys.find( sid => { 
-                const s = this._subscriptions[sid];
-                return (s.address===address && s.service===service && s.characteristic === characteristic) 
-            })
-
-            if (existing) {
-                this.emit('notify', address, service, characteristic, notify);
-                return;
-            }
-    
-        }
-        catch(err) {
-            console.log('~~~ error',err)
-        }
 
         this._sendRequest({
             cmd: notify ? 'subscribe' : 'unsubscribe',
@@ -463,13 +447,32 @@ class WinrtBindings extends events.EventEmitter {
             service: toWindowsUuid(service),
             characteristic: toWindowsUuid(characteristic)
         })
-            .then(result => {
+            .then(subId => {
                 if (notify) {
-                    this._subscriptions[result] = { address, service, characteristic };
+                    this._subscriptions[subId] = { address, service, characteristic };
+                }
+                else {
+                    this.deleteSubscriptions( address, service, characteristic )
                 }
                 this.emit('notify', address, service, characteristic, notify);
             })
             .catch(err => this.emit('notify', address, service, characteristic, err));
+    }
+
+    deleteSubscriptions( address, service, characteristic ) {
+
+        try {
+            const subscriptions = Object.keys( this._subscriptions).map( id=> ({id,sub:this._subscriptions[id]}))
+
+            const subs = subscriptions.filter( s=> s.sub.address===address && (!service || s.sub.service===service) && (!characteristic ||s.sub.characteristic===characteristic ))
+            subs.forEach( s => {delete this._subscriptions[s.id]})
+    
+        }
+        catch(err) {
+            this.logger.logEvent({message:'error',fn:'deleteSubsriptions', error:err.message, stack:err.stack })
+        }
+        
+
     }
 
     _processMessage(message) {
@@ -482,127 +485,24 @@ class WinrtBindings extends events.EventEmitter {
     
                     this.state = 'poweredOn';
                     this.emit('stateChange', this.state);
-                    break;
-    
+                    break;    
                 case 'scanResult':
                     this.processScanResult(message, isPeripheralValid);
-                    break;
-    
-
-                    
-    
+                    break;    
                 case 'response':
-                    {
-                        if (this._requests[message._id]) {
-                            const request = this._requests[message._id];
-                            if (message.error) {
-                                if (this.bleServerDebug)
-                                    this.logEvent( {message:'BLEserver in:', type:'response error', _id:message._id,  error:message.error,request});
-        
-                                this._requests[message._id].reject(new Error(message.error));
-                            } else {
-                                let result = message.result;
-                                try {
-                                    const data = result && isArrayBuffer(result)? Buffer.from(result).toString('hex') : result
-                                    if (this.bleServerDebug)
-                                        this.logEvent( {message:'BLEserver in:', type:'response', _id:message._id, data,request});
-                                }
-                                catch(err) {
-                                    console.log('~~~ BLE Server', message, err)
-                                }
-                                this._requests[message._id].resolve(result);
-                            }
-                            delete this._requests[message._id];
-                        }
-                        else if (this._prevMessage && this._prevMessage.cmd === 'scan')   {
-                            if (this.bleServerDebug)
-                                this.logEvent( {message:'BLEserver in:', request:'scan', result:'ok'});
-        
-                            this.scanStatus = 'started'
-                            this.emit('scanStart',false);
-                        }
-                        else if (this._prevMessage && this._prevMessage.cmd === 'stopScan')   {
-                            if (this.bleServerDebug)
-                                this.logEvent( {message:'BLEserver in:', request:'stopScan', result:'ok'});
-                            this.scanStatus = 'stopped'
-                            this.emit('scanStop',false);
-                        }
-                        else {
-                            if (this.bleServerDebug)
-                                this.logEvent( {message:'BLEserver in:', type:'response', _id:message._id, result:message.result});
-                        }
-                    }
+                    this.processResponseMessage(message);
                     break;
-
-    
                 case 'disconnectEvent':
-                    {
-                        let processed = false;
-    
-                        for (let address of Object.keys(this._deviceMap)) {
-                            const requestIds = Object.keys(this._requests);
-        
-                            const disconnectRequest = requestIds.find( i => {
-                                const r = this._requests[i];
-                                return (r.message && r.message.cmd==='disconnect' && r.message.address===address)
-                            });
-        
-                            if (disconnectRequest) {
-                                if (this._deviceMap[address] == message.device) {
-                                    this._deviceMap[address] = null;
-                                    processed = true;
-                                    this.emit('disconnect', address);
-                                }                            
-                                if (this.bleServerDebug)
-                                    this.logEvent( {message:'BLEserver in:', type:'response', address, request:'disconnect',result:'ok' });
-                            }
-                            else {
-        
-                                if (this._deviceMap[address] == message.device) {
-                                    this._deviceMap[address] = null;
-
-                                    if (!processed)
-                                        this.logEvent( {message:'BLEserver in:', type:'disconnect', device:message.device});
-            
-                                    processed = true;
-                                    this.emit('disconnect', address);
-                                }                                    
-        
-                            }
-        
-                            
-                        }
-        
-                        if (!processed)
-                            this.logEvent( {message:'BLEserver in:', type:'disconnect', device:message.device});
-        
-    
-                    }
-                    break;
-    
+                    this.processDisconnectEvent(message);
+                    break;    
                 case 'valueChangedNotification':
-                    {
-                        const subscription  = this._subscriptions[message.subscriptionId]
-                        if (subscription) {
-                            const { address, service, characteristic } = subscription;
-                            const data = message.value ? Buffer.from(message.value).toString('hex') : message.value
-                            if (this.bleServerDebug)
-                                this.logEvent( {message:'BLEserver in:', type:'notify', address, service:uuid(service), characteristic:uuid(characteristic), data });
-                
-                            this.emit('read', address, service, characteristic, Buffer.from(message.value), true);
-                        }
-    
-                    }
-                  
+                    this.processValueChangedNotification(message);                  
                     break;
-            }
-    
+            }    
         }
         catch(err) {
             this.logEvent({message:'error', fn:'_processMessage', error:err.message, in:message})
         }
-
-
     }
 
     processScanResult(message, isPeripheralValid) {
@@ -632,12 +532,11 @@ class WinrtBindings extends events.EventEmitter {
 
                     isPeripheralValid = true;
 
-                    if (this.scanProps && this.scanProps.emitted && Array.isArray(this.scanProps.emitted)) {
+                    if (this.scanProps?.emitted && Array.isArray(this.scanProps.emitted)) {
                         if (this.scanProps.emitted.find(e => e === address) !== undefined)
                             isPeripheralValid = false;
                     }
 
-                    //console.log( '~~~ found',address,isPeripheralValid,this.scanProps.targets,this.scanProps.emitted, advertisement.serviceUuids) //.map( sid ) )  => ({sid,valid:matches(sid,this.scanProps.targets[0],sid)})))
                     if (isPeripheralValid) {
 
                         this.scanResult[address] = { uuid, address, advertisement };
@@ -648,8 +547,8 @@ class WinrtBindings extends events.EventEmitter {
                                 'discover',
                                 uuid,
                                 address,
-                                'public', // TODO address type
-                                true, // TODO connectable
+                                'public', 
+                                true, 
                                 advertisement,
                                 message.rssi);
                         }
@@ -705,6 +604,101 @@ class WinrtBindings extends events.EventEmitter {
         }
         return isPeripheralValid;
     }
+
+    processResponseMessage(message) {
+        if (this._requests[message._id]) {
+            this.generateResponse(message);
+        }
+        else if (this._prevMessage && this._prevMessage.cmd === 'scan') {
+            if (this.bleServerDebug)
+                this.logEvent({ message: 'BLEserver in:', request: 'scan', result: 'ok' });
+
+            this.scanStatus = 'started';
+            this.emit('scanStart', false);
+        }
+        else if (this._prevMessage && this._prevMessage.cmd === 'stopScan') {
+            if (this.bleServerDebug)
+                this.logEvent({ message: 'BLEserver in:', request: 'stopScan', result: 'ok' });
+            this.scanStatus = 'stopped';
+            this.emit('scanStop', false);
+        }
+        else if (this.bleServerDebug) {
+                this.logEvent({ message: 'BLEserver in:', type: 'response', _id: message._id, result: message.result });
+        }
+    }
+
+    generateResponse(message) {
+        const request = this._requests[message._id];
+        if (message.error) {
+            if (this.bleServerDebug)
+                this.logEvent({ message: 'BLEserver in:', type: 'response error', _id: message._id, error: message.error, request });
+
+            this._requests[message._id].reject(new Error(message.error));
+        } else {
+            let result = message.result;
+            try {
+                const data = result && isArrayBuffer(result) ? Buffer.from(result).toString('hex') : result;
+                if (this.bleServerDebug)
+                    this.logEvent({ message: 'BLEserver in:', type: 'response', _id: message._id, data, request });
+            }
+            catch (err) {
+                console.log('~~~ BLE Server', message, err);
+            }
+            this._requests[message._id].resolve(result);
+        }
+        delete this._requests[message._id];
+    }
+
+    processDisconnectEvent(message) {
+        let processed = false;
+
+        for (let address of Object.keys(this._deviceMap)) {
+            const requestIds = Object.keys(this._requests);
+
+            const disconnectRequest = requestIds.find(i => {
+                const r = this._requests[i];
+                return (r.message && r.message.cmd === 'disconnect' && r.message.address === address);
+            });
+
+            if (disconnectRequest) {
+                if (this._deviceMap[address] == message.device) {
+                    this._deviceMap[address] = null;
+                    processed = true;
+                    this.emit('disconnect', address);
+                }
+                if (this.bleServerDebug)
+                    this.logEvent({ message: 'BLEserver in:', type: 'response', address, request: 'disconnect', result: 'ok' });
+            }
+            else if (this._deviceMap[address] == message.device) {
+                this._deviceMap[address] = null;
+
+                if (!processed)
+                    this.logEvent({ message: 'BLEserver in:', type: 'disconnect', device: message.device });
+
+                processed = true;
+                this.emit('disconnect', address);
+            }
+
+            this.deleteSubscriptions(address);
+
+        }
+
+        if (!processed)
+            this.logEvent({ message: 'BLEserver in:', type: 'disconnect', device: message.device });
+    }
+
+    processValueChangedNotification(message) {
+        const subscription = this._subscriptions[message.subscriptionId];
+        if (subscription) {
+            const { address, service, characteristic } = subscription;
+            const data = message.value ? Buffer.from(message.value).toString('hex') : message.value;
+            if (this.bleServerDebug)
+                this.logEvent({ message: 'BLEserver in:', type: 'notify', address, service: uuid(service), characteristic: uuid(characteristic), data });
+
+            this.emit('read', address, service, characteristic, Buffer.from(message.value), true);
+        }
+    }
+
 
     buildAdvertisement(message) {
         const address =   message.bluetoothAddress;
@@ -784,7 +778,7 @@ class WinrtBindings extends events.EventEmitter {
 
     async write(address, service, characteristic, data, withoutResponse,callback) {
         this.logEvent({message: 'BLEServer write', address,service,characteristic,data, withoutResponse});
-        // TODO data, withoutResponse
+        
         try {
             const res = await this._sendRequest({
                 cmd: 'write',

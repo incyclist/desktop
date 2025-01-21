@@ -81,24 +81,32 @@ class NobleIpcBinding extends events.EventEmitter {
         
         const cachedPeripheral = this.connectedDevices.find(d => d.id === id) 
         if (cachedPeripheral) {
-            if (cachedPeripheral.state==='connected' )
-                return null;
 
-            const error = await this.getApi().connectDevice(id);
-            peripheral.state = 'connected';
-            cachedPeripheral.state = 'connected'
-            return null;
+            const {characteristics} = cachedPeripheral
+            characteristics.forEach( c => {
+                try {
+                    c.unsubscribe()
+                    c.removeAllListeners()
+                }
+                catch{}
+            } )
+            this.connectedDevices.splice( this.connectedDevices.indexOf(cachedPeripheral),1)
         }
-        else {
-            const error =  await this.getApi().connectDevice(id)
-            if ( error ) 
-                throw error;
-            peripheral.state = 'connected';
-            this.connectedDevices.push({id,peripheral});
-        }
+        const error =  await this.getApi().connectDevice(id)
+        if ( error ) 
+            throw error;
+        peripheral.state = 'connected';
+        this.connectedDevices.push({id,peripheral});
     }
 
     async disconnectDevice(peripheral, callback) {
+        const {id} = peripheral
+
+        const cachedPeripheral = this.connectedDevices.find(d => d.id === id) 
+        if (cachedPeripheral) {
+            this.connectedDevices.splice( this.connectedDevices.indexOf(cachedPeripheral),1)
+        }
+
         if (callback)
             callback(null)
     }

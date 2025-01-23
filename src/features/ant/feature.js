@@ -44,7 +44,7 @@ class AntFeature extends Feature{
     
             if (parts.name.toLowerCase()==='incyclist') { // production binary            
                 antServerPath = path.join( parts.dir, './AntServer.bin')
-                this.logger.logEvent({message:'checking if BLEServer is pre-bundled',appPath: antServerPath})                
+                this.logger.logEvent({message:'checking if Ant+Server is pre-bundled',appPath: antServerPath})                
                 if ( fs.existsSync(antServerPath) ) {
                     this.logger.logEvent({message:'Ant+Server is pre-bundled'})                
                 }        

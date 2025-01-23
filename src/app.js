@@ -38,18 +38,18 @@ class IncyclistApp
         // initialize minimum required fot single instance check
         // all other initialization can be done in start())
 
+        this.environment  = process.env.ENVIRONMENT ?? "prod";
         
         app.incyclistApp = this
         app.allowRendererProcessReuse=false;  
         if (process.platform==='darwin') {
             Menu.setApplicationMenu(null);
         }
-        if (process.platform==='linux') {
+        if (process.platform==='linux' && !process.env.DEBUG && !process.env.LOADER_DEBUG && this.environment==='prod')  {
             app.commandLine.appendSwitch('no-sandbox');            
         }
 
 
-        this.environment  = process.env.ENVIRONMENT || "prod";
         this.session = gnerateUUID();
         this.settings = {}
         this.powerSaveBlockerID = undefined;

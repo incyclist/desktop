@@ -179,7 +179,7 @@ class WinrtBindings extends events.EventEmitter {
                                     
                                     
                                 }
-                                //no need to call the reject here, as it will have been called in the
+                                //no need to call fthe reject here, as it will have been called in the
                                 //'error' stream;
                             });    
                         }
@@ -243,7 +243,14 @@ class WinrtBindings extends events.EventEmitter {
                 this.emit('stateChange', this.state);    
 
                 this._bleServer.removeAllListeners()
+                
                 delete this._bleServer;
+                this._prevMessage = '';
+                this._deviceMap = {};
+                this._requestId = 0;
+                this._requests = {};
+                this._subscriptions = {};
+        
                 this.launchBleServer()
             }            
         });
@@ -365,15 +372,18 @@ class WinrtBindings extends events.EventEmitter {
 
     }
 
-    disconnect(address) {
+    disconnect(address, fromEvent=false) {
         
         this.logger.logEvent({message: 'BLEServer disconnect', address});       // always log - also when logging is disabled
-        this._sendRequest({ cmd: 'disconnect', device: this._deviceMap[address] })
+        return this._sendRequest({ cmd: 'disconnect', device: this._deviceMap[address] })
             .then(result => {
                 this._deviceMap[address] = null;
-                this.emit('disconnect', address, null);
             })
-            .catch(err => this.emit('disconnect', address, err));
+            .catch(err =>  { 
+                if (fromEvent)
+                    return;
+                this.logger.logEvent({message:'error', fn:'disconnect', error:err.message,stack:err.stack})
+            });
     }
 
     discoverServices(address, filters = []) {
@@ -436,10 +446,10 @@ class WinrtBindings extends events.EventEmitter {
 
     notify(address, service, characteristic, notify) {
         if (!notify) {
+            this.deleteSubscriptions( address, service, characteristic )
             this.emit('notify', address, service, characteristic, notify);
             return;
         }
-
 
         this._sendRequest({
             cmd: notify ? 'subscribe' : 'unsubscribe',
@@ -632,7 +642,6 @@ class WinrtBindings extends events.EventEmitter {
         if (message.error) {
             if (this.bleServerDebug)
                 this.logEvent({ message: 'BLEserver in:', type: 'response error', _id: message._id, error: message.error, request });
-
             this._requests[message._id].reject(new Error(message.error));
         } else {
             let result = message.result;
@@ -664,7 +673,6 @@ class WinrtBindings extends events.EventEmitter {
                 if (this._deviceMap[address] == message.device) {
                     this._deviceMap[address] = null;
                     processed = true;
-                    this.emit('disconnect', address);
                 }
                 if (this.bleServerDebug)
                     this.logEvent({ message: 'BLEserver in:', type: 'response', address, request: 'disconnect', result: 'ok' });
@@ -676,11 +684,10 @@ class WinrtBindings extends events.EventEmitter {
                     this.logEvent({ message: 'BLEserver in:', type: 'disconnect', device: message.device });
 
                 processed = true;
-                this.emit('disconnect', address);
+                this.emit('disconnect', address);                
             }
 
             this.deleteSubscriptions(address);
-
         }
 
         if (!processed)
@@ -688,6 +695,7 @@ class WinrtBindings extends events.EventEmitter {
     }
 
     processValueChangedNotification(message) {
+        
         const subscription = this._subscriptions[message.subscriptionId];
         if (subscription) {
             const { address, service, characteristic } = subscription;

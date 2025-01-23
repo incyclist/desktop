@@ -74,7 +74,7 @@ class FFMpegSupport {
     }
 
     download(version) {
-        try { throw new Error()} catch(err) {console.log('~~~~ DOENLOAD FFMPG',err.stack)}
+        
         this.updateBusy = true;
         this.logger.logEvent({message:'start downloading version',ffmpegVersion:version});
 

@@ -218,7 +218,7 @@ class AppSettings {
         }
 
         try {
-            const baseDir =  this.environment==='dev'  ? path.join(__dirname,'../.settings') : getAppDirectory();
+            const baseDir =  this.environment==='dev'  ? path.join(__dirname,'../../..') : getAppDirectory();
             return   path.join(baseDir,'settings.json')
     
         }

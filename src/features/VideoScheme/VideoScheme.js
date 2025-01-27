@@ -208,12 +208,13 @@ class VideoScheme  extends Feature {
     }
 
     parseError(err) {
-       this.logger.logEvent({message:'error creating preveiw', error:err.message})
         const parts = err.message.split(':')
-        if (parts.length<2) return err;
+        const error = (parts.length<2) ? err.message : parts[parts.length-1].trim()
 
-        return new Error( parts[parts.length-1].trim())
-
+        if (error!=='No such file or directory') {
+            this.logger.logEvent({message:'error creating preview', error:err.message})
+        }
+        return new Error(error)
     }
 
     run(cmd,stream) {

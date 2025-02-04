@@ -62,7 +62,7 @@
     "@electron-forge/plugin-fuses": "^7.6.0",
     "@electron/fuses": "^1.8.0",
     "@electron/rebuild": "^3.7.1",
-    "@mapbox/node-pre-gyp": "^1.0.11",
+    "@mapbox/node-pre-gyp": "^2.0.0",
     "@playwright/test": "^1.50.1",
     "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",

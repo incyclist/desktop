@@ -60,7 +60,7 @@ jobs:
       env:
         RELEASE_SERVER: ${{ secrets.RELEASE_SERVER }}
       run: |        
-        $env:BUILD_TARGET=dist
+        "dist" >> $env:BUILD_TARGET
         npm install       
         npm run make
   

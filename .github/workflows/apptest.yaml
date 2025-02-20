@@ -1,36 +1,36 @@
 name: App Tests
 on:
-  push:
-    branches:
-      - '**'
-    paths-ignore:
-      - '.gitignore'
-      - '.github/**'
-      - 'bin/**'
-      - 'config/**'
-      - 'entitlements/**'
-      - 'res/**'
-      - 'scripts/**'
-      - 'test/**'
-      - 'testdata/**'
-      - 'README.MD'
-      - 'forge.config.js'
-    tags-ignore:
-      - '**'
-  pull_request:
-    types: [opened,reopened]
-    paths-ignore:
-      - '.gitignore'
-      - '.github/**'
-      - 'bin/**'
-      - 'config/**'
-      - 'entitlements/**'
-      - 'res/**'
-      - 'scripts/**'
-      - 'test/**'
-      - 'testdata/**'
-      - 'README.MD'
-      - 'forge.config.js'
+  # push:
+  #   branches:
+  #     - '**'
+  #   paths-ignore:
+  #     - '.gitignore'
+  #     - '.github/**'
+  #     - 'bin/**'
+  #     - 'config/**'
+  #     - 'entitlements/**'
+  #     - 'res/**'
+  #     - 'scripts/**'
+  #     - 'test/**'
+  #     - 'testdata/**'
+  #     - 'README.MD'
+  #     - 'forge.config.js'
+  #   tags-ignore:
+  #     - '**'
+  # pull_request:
+  #   types: [opened,reopened]
+  #   paths-ignore:
+  #     - '.gitignore'
+  #     - '.github/**'
+  #     - 'bin/**'
+  #     - 'config/**'
+  #     - 'entitlements/**'
+  #     - 'res/**'
+  #     - 'scripts/**'
+  #     - 'test/**'
+  #     - 'testdata/**'
+  #     - 'README.MD'
+  #     - 'forge.config.js'
   workflow_dispatch:
 
 jobs:
@@ -69,9 +69,16 @@ jobs:
         output=$(ls -al test-results 2>&1) && exit_status=$? || exit_status=$?
         echo $output
 
+    - name: 📊 Upload report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
 
     - uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
+      if: always()
       with:
         name: test-results
         path: test-results/

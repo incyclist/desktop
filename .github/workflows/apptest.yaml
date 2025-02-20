@@ -60,10 +60,8 @@ jobs:
     - name: Install Playwright Browsers
       run: npx playwright install --with-deps
 
-    - uses: coactions/setup-xvfb@v1
-      name: Run Playwright tests
-      with:
-        run: npm run app-test
+    - name: Run Playwright tests
+      run: npm run app-test
 
     - name: Show directory content
       run: | 

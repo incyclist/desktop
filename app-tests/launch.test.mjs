@@ -8,7 +8,7 @@ let settings
 
 test.skip('App Launches', async () => {
 
-    console.log('#### App Launches ####')
+    console.log(new Date().toISOString(),'#### App Launches ####')
 
     test.setTimeout(50000)
     settings = prepareSettings('new-user')
@@ -25,6 +25,9 @@ test.skip('App Launches', async () => {
         // the result of the require('electron') in the main app script.
         return app.getAppPath();
     });
+
+    console.log(new Date().toISOString(),'#### App Launched')
+
     electronApp.on('console', console.log)
 
     // Get the first window that the app opens, wait if necessary.
@@ -46,6 +49,6 @@ test.skip('App Launches', async () => {
 test.afterAll(async () => {
     if (electronApp)
         await electronApp.close();
-    console.log('#### App Launches Done ####')
+    console.log(new Date().toISOString(),'#### App Launches Done ####')
 
 });

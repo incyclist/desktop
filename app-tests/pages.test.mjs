@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { _electron } from 'playwright';
 import { prepareSettings } from './utils/settings.mjs';
+import path from 'path'
+import os from 'os'
 
 let electronApp
 let settings
@@ -10,17 +12,19 @@ const sleep = (ms) => {
 }
 
 test('Navigate Pages', async () => {
-    console.log('#### Page navigation ####')
+    console.log(new Date().toISOString(),'#### Page navigation ####')
 
     let mainWindow
     test.setTimeout(50000)
     settings = prepareSettings('default')
 
+    console.log('# ENV',process.env)
 
     await test.step('Launch App', async () => {
         electronApp = await _electron.launch({
             args: ['./'],
-            recordVideo: {dir: 'test-results'}    
+            recordVideo: {dir: 'test-results'}    ,
+            env:{...process.env, SETTINGS_FILE:path.join(os.tmpdir(), 'settings.json')}
         });
    
     
@@ -30,6 +34,9 @@ test('Navigate Pages', async () => {
             // the result of the require('electron') in the main app script.
             return app.getAppPath();
         });
+
+        console.log(new Date().toISOString(),'#### App Launched')
+
         electronApp.on('console', console.log)
     
         // Get the first window that the app opens, wait if necessary.
@@ -98,6 +105,6 @@ test('Navigate Pages', async () => {
 test.afterAll(async () => {
     if (electronApp)
         await electronApp.close();
-    console.log('#### Page navigation done ####')
+    console.log(new Date().toISOString(),'#### Page navigation done ####')
 
 });

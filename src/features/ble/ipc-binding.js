@@ -82,7 +82,7 @@ class NobleIpcBinding extends events.EventEmitter {
         const cachedPeripheral = this.connectedDevices.find(d => d.id === id) 
         if (cachedPeripheral) {
 
-            const {characteristics} = cachedPeripheral
+            const {characteristics=[]} = cachedPeripheral
             characteristics.forEach( c => {
                 try {
                     c.unsubscribe()

@@ -1,5 +1,6 @@
 const request = require( 'request')
 const fs = require ( 'fs/promises');
+const path = require('path');
 const { EventLogger } = require('gd-eventlog');
 
 class RequestForm  {
@@ -10,6 +11,22 @@ class RequestForm  {
         this.logger = new EventLogger('Form')
     }
 
+    async getRouteNameFromJson(tcxFilePath) {
+        try {
+            // Convert TCX path to JSON path by changing the extension
+            const jsonFilePath = tcxFilePath.replace(/\.tcx$/, '.json');
+            const jsonContent = await fs.readFile(jsonFilePath, 'utf8');
+            const routeData = JSON.parse(jsonContent);
+            
+            // Extract route name from JSON structure and append suffix
+            const routeName = routeData?.route?.name;
+            return routeName ? `${routeName} - Incyclist Ride` : 'Incyclist Ride'; // Append suffix if route name exists
+        } catch (err) {
+            this.logger.logEvent({message: 'error reading JSON file', fn: 'getRouteNameFromJson', error: err.message});
+            return 'Incyclist Ride'; // Return default name if any error occurs
+        }
+    }
+
     async createForm(optsRequest,uploadInfo) {
         const opts = {...optsRequest}
 
@@ -17,6 +34,12 @@ class RequestForm  {
             opts.formData = {}
             let keys = Object.keys(uploadInfo);         
             
+            // If we have a file to upload and it's a TCX file, get the route name
+            if (uploadInfo.file?.type === 'file' && uploadInfo.data_type === 'tcx') {
+                const routeName = await this.getRouteNameFromJson(uploadInfo.file.fileName);
+                uploadInfo.name = routeName;
+            }
+
             for (let i=0;i<keys.length;i++) {
                 const key = keys[i]
                 if ( uploadInfo[key]!==undefined) {

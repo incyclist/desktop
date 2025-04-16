@@ -207,7 +207,7 @@ class IncyclistApp
         // shielding with try/catch to avoid loops due to exceptions in log library
         try {
         
-            if (!electron || !electron.incyclistApp || !electron.incyclistApp.logger)
+            if (!electron?.incyclistApp?.logger)
                 console.error('+++++++++++++++++++++++++++++++++',err); 
             else     
                 this.logger.logEvent( {message: 'unhandled exception', error:err.message, stack: err.stack})
@@ -289,7 +289,7 @@ class IncyclistApp
     }
 
     setAdapterDepth(adapter, depth) {
-        if ( adapter && adapter.props)
+        if ( adapter?.props)
             adapter.props.depth = depth;
     }
 

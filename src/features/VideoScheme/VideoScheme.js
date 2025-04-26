@@ -427,6 +427,10 @@ class VideoScheme  extends Feature {
     
         const {filename,ext} = getFileInfo(url,SCHEME)
 
+        if (!filename || !ext) {
+            return sendResponse({ success:false, error:`could not convert ${url}`})
+        }
+
         if ( ext.toLowerCase() === 'mp4') {
             return sendResponse({ success:false, error:`file type not supported: ${ext}`})
 

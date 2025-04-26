@@ -20,10 +20,9 @@ function getFileInfo ( urlStr, scheme='file') {
         try {
             return decodeURI(str)
         }
-        catch(err) { 
+        catch { 
             return str
-        }
-        //catch { return str}
+        }        
     }
 
     const decodedUrl = (urlStr.startsWith('http')||scheme.startsWith==='http') ? decoded(urlStr): urlStr;
@@ -43,7 +42,7 @@ function getFileInfo ( urlStr, scheme='file') {
             return pathInfo
 
         }
-        else if ( decodedUrl.startsWith(`${scheme}:`)) {
+        else if ( decodedUrl.startsWith(`${scheme}:`) || decodedUrl.startsWith('file:') ) {
             const urlParts = scheme.startsWith('http') ? decodedUrl.split('://') : decodedUrl.split(':///')
             pathInfo = path.parse(urlParts[1])
             pathInfo.name = pathInfo.base;
@@ -54,7 +53,7 @@ function getFileInfo ( urlStr, scheme='file') {
             return pathInfo
             
         }
-        else pathInfo = newURL(decodedUrl)
+        else pathInfo = path.parse(decodedUrl)
 
         let filename = pathInfo.pathname;
 
@@ -68,7 +67,7 @@ function getFileInfo ( urlStr, scheme='file') {
         return { filename, outFile,ext}
 
     }
-    catch (err) {
+    catch  {
         return {}
     }
 }

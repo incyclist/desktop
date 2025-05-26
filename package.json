@@ -67,7 +67,7 @@
     "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",
     "dotenv": "^16.4.7",
-    "electron": "^33.3.2",
+    "electron": "^36.3.1",
     "electron-builder": "^25.1.8",
     "fs-extra": "^11.3.0",
     "jest": "^29.6.2",

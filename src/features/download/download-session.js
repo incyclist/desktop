@@ -90,6 +90,9 @@ class DownloadSession extends EventEmitter {
                 }
 
                 res.on('data',(chunk)=>{
+                    if (this.isStopped)
+                        return
+                    
                     if (writeStream) {
                         const buffer = Buffer.from(chunk)
                         process.nextTick( ()=> {
@@ -137,21 +140,7 @@ class DownloadSession extends EventEmitter {
 
                 res.on('end', async () => {
                     this.isStopped = true;
-                    try {
-
-                        if (writeStream) {
-                            writeStream.end();
-                            try {
-                                writeStream.close();
-                            }
-                            catch(err) {}
-                        }     
-                        writeStream = null;                 
-                    }
-                    catch(err) {
-                        this.logger.logEvent({message:'error',fn:`start().on('end')`,error:err.message, stack:err.stack })
-                        this.emit('error',err)
-                    }
+                    this.closeStream()
                 })
 
             }
@@ -171,14 +160,35 @@ class DownloadSession extends EventEmitter {
 
     stop() {
         this.isStopped = true;
-        if (this.request)
-            this.request.destroy();
+        process.nextTick( () => {
+            this.closeStream()
+            if (this.request)
+                this.request.destroy();
+    
+        })
     }
 
     emit(event,...args) {
         if (!this.props.noIPC)
             ipcSendEvent( 'dl-mgr-session-event',this.id,event,...args);
         super.emit(event,...args)
+    }
+
+    closeStream() {
+        if (!this.writeStream)
+            return
+
+        try {
+            writeStream.end();
+            writeStream.close();
+        }
+        catch(err) {
+            this.logger.logEvent({message:'error',fn:`start().on('end')`,error:err.message, stack:err.stack })
+            this.emit('error',err)
+        }
+
+        this.writeStream = null;                 
+
     }
 
 

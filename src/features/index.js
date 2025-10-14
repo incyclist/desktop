@@ -14,7 +14,7 @@ const Fs = require('./fs').getInstance();
 const OAuth = require('./oauth').getInstance()
 const Logging = require('./logging').getInstance()
 const DirectConnect = require('./direct-connect').getInstance()
-
+const Crypto = require('./crypto').getInstance()
 const {ObserverHandler} = require('./utils/observer')
 
 function initFeaturesApp( props ) {
@@ -37,13 +37,12 @@ function initFeaturesApp( props ) {
     DownloadManager.register(props);
     Logging.register(props);
     DirectConnect.register(props);
+    Crypto.register(props);
 
 }
 
 
 function initFeaturesWeb( electron,ipcRenderer) {
-
-    console.log('initFeaturesWeb',process.env);
 
     electron.hasFeature =  (name)=>  electron[name]!==undefined || electron._features.find( f=>f.name===name)!==undefined
     electron.registerFeature = (f) => { 
@@ -73,6 +72,7 @@ function initFeaturesWeb( electron,ipcRenderer) {
     Fs.registerRenderer(electron,ipcRenderer);
     OAuth.registerRenderer(electron,ipcRenderer);
     DownloadManager.registerRenderer(electron,ipcRenderer);
+    Crypto.registerRenderer(electron,ipcRenderer);
     Logging.registerRenderer(electron,ipcRenderer);
     DirectConnect.registerRenderer(electron,ipcRenderer);
 

@@ -63,7 +63,7 @@
     "@electron/fuses": "^1.8.0",
     "@electron/rebuild": "^4.0.1",
     "@mapbox/node-pre-gyp": "^2.0.0",
-    "@playwright/test": "^1.52.0",
+    "@playwright/test": "^1.56.0",
     "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",
     "dotenv": "^16.4.7",

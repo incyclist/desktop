@@ -1,7 +1,7 @@
 const Feature = require('../base');
 const {ipcMain,app} = require('electron');
 const {ipcCall, ipcCallNoResponse, ipcHandle, ipcHandleNoResponse} = require ('../utils');
-const EventEmitter = require('events');
+const EventEmitter = require('node:events');
 const OAuthWindow = require('../../web/pages/oauth');
 const { EventLogger } = require('gd-eventlog');
 
@@ -23,9 +23,12 @@ class OauthFeature extends Feature{
     }
 
     authorize(provider) {       
+        let completed = false
         return new Promise ( done => {
 
             const onStatus = (event) => {
+                completed = true
+                oauth.removeAllListeners()
                 this.close(oauth) 
                 if (event.user_changed) {
                     done( {success:true, user:event.user_changed})
@@ -36,11 +39,19 @@ class OauthFeature extends Feature{
             }
 
             const onFailed = (event) => {
+                if (completed) 
+                    return;
+                completed = true;
+                oauth.removeAllListeners()
                 this.close(oauth) 
                 done({success:false,reason: event? event.reason: undefined })                
             }
 
             const onClosed = (event) => {
+                if (completed) 
+                    return;
+                completed = true;
+                oauth.removeAllListeners()
                 this.close(oauth) 
                 done({success:false,reason: 'user aborted' })                
             }

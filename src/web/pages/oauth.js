@@ -146,7 +146,7 @@ class OAuthWindow extends EventEmitter{
     }
   
     onClosed() {
-        this.logger.logEvent({message:'closed'})
+        this.logger.logEvent({message:'OAuthWindow closed'})
         this.win = undefined;
         this.emit('closed',{provider:this.provider, reason:'window could not be loaded'})
 

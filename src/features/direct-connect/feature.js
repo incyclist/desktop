@@ -4,7 +4,7 @@ const {EventLogger } = require('gd-eventlog');
 const {ipcSendEvent, ipcCallSync, ipcRegisterBroadcast, ipcHandleSync} = require ('../utils')
 const Feature = require('../base')
 const { Bonjour } = require('bonjour-service')
-const net = require('net');
+const net = require('node:net');
 
 
 class DirectConnectSupport extends Feature{

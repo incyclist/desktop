@@ -26,12 +26,12 @@ const onError = ( err) => {
 }
 
 const onScan = (services='all', allowDuplicates=true)=> { 
-    serviceUUIDs = services === 'all' ? [] : services??[].split(',')
+    const serviceUUIDs = services === 'all' ? [] : services??[].split(',')
     ble.startScanning(serviceUUIDs, allowDuplicates)
 }
 
 const onStopScan = (services='all', allowDuplicates=true)=> { 
-    serviceUUIDs = services === 'all' ? [] : services??[].split(',')
+    const serviceUUIDs = services === 'all' ? [] : services??[].split(',')
     ble.stopScanning(serviceUUIDs, allowDuplicates)
 }
 
@@ -131,7 +131,7 @@ const strToBool = (s) => {
     // will match one and only one of the string 'true','1', or 'on' regardless
     // of capitalization and regardless of surrounding white-space.
     //
-    regex=/^\s*(true|1|on)\s*$/i
+    const regex=/^\s*(true|1|on)\s*$/i
 
     return regex.test(s);
 }

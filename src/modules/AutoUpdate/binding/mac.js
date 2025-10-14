@@ -1,5 +1,5 @@
 const UpdatehandlerBase = require('./base');
-const EventEmitter = require('events')
+const EventEmitter = require('node:events')
 
 const { updateElectronApp, UpdateSourceType } =  require('update-electron-app');
 

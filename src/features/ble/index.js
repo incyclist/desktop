@@ -367,10 +367,9 @@ class BLEFeature extends Feature {
                         bufferStr = data.toString()
                     b = Buffer.from(data)
                 }
-                catch(err) {}
-    
-    
-                //this.logger.logEvent( {message:'write: buffer is not a Buffer',buffer:bufferStr,hex:b.toString('hex'), type:typeof data})
+                catch {
+                    this.logger.logEvent( {message:'write: buffer is not a Buffer',buffer:bufferStr,hex:b?.toString('hex'), type:typeof data})
+                }
             }
 
             if (withoutResponse===true) {

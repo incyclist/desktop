@@ -6,7 +6,7 @@ const Feature = require('../base')
 const {scan} = require('./Network')
 const IpcSocketBinding = require('./ipc-socket');
 const DirectConnectIpcBinding = require('../direct-connect/ipc-binding');
-const {Socket} = require('net');
+const {Socket} = require('node:net');
 
 // singleton pattern
 class NetworkFeature extends Feature{

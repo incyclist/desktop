@@ -1,5 +1,5 @@
 const { Bonjour } = require('bonjour-service')
-const net = require('net');
+const net = require('node:net');
 
 const createBinding = ()=>{
     return {

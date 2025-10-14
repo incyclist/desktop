@@ -2,10 +2,10 @@ const Feature = require("../base");
 const BleServerBinding = require('./bleserver-binding')
 const IpcBinding = require('./ipc-binding')
 const {ipcCall, ipcSendEvent, ipcResponse,isTrue, ipcCallNoResponse,ipcHandle,ipcHandleNoResponse} = require ('../utils')
-const os = require('os');
+const os = require('node:os');
 const { getAppDirectory } = require("../../utils");
 const { EventLogger } = require('gd-eventlog');
-const EventEmitter = require("events");
+const EventEmitter = require("node:events");
 const { ipcMain } = require("electron");
 const Peripheral = require("@stoprocent/noble/lib/peripheral");
 const Characteristic = require("@stoprocent/noble/lib/characteristic");
@@ -368,7 +368,7 @@ class BLEFeature extends Feature {
                     b = Buffer.from(data)
                 }
                 catch {
-                    this.logger.logEvent( {message:'write: buffer is not a Buffer',buffer:bufferStr,hex:b?.toString('hex'), type:typeof data})
+                    this.logger.logEvent( {message:'write: buffer is not a Buffer',buffer:bufferStr,hex:b?.toString('hex'), type:typeof data})                    
                 }
             }
 

@@ -35,7 +35,7 @@
     "chrome-native-messaging": "^0.2.0",
     "electron-squirrel-startup": "^1.0.1",
     "electron-unhandled": "^5.0.0",
-    "electron-updater": "^6.1.8",
+    "electron-updater": "^6.6.2",
     "fluent-ffmpeg": "^2.1.2",
     "gd-eventlog": "^0.1.24",
     "incyclist-ant-plus": "^0.3.5",

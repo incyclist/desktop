@@ -373,7 +373,7 @@ class BLEFeature extends Feature {
             }
 
             if (withoutResponse===true) {
-                characteristic.write( b,true).catch(()=>{})              
+                characteristic.write( b,true)?.catch(()=>{})              
                 return null;
             }
             else {

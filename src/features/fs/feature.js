@@ -135,7 +135,7 @@ class FileSystemSupport extends Feature{
 
     onWriteStreamEvent(id,event,...args) {
         const ws = this.getStream(id);
-        if (!ws || !ws.ipc) return 
+        if (!ws?.ipc) return 
         ws.ipc.emit(event,...args)
     }
 

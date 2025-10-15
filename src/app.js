@@ -137,7 +137,7 @@ class IncyclistApp
             await sleep(100)
         }
 
-        this.logger.logEvent({message:'app event',event:'ready'})
+        this.logger.logEvent({message:'app event',event:'ready', electron:process.versions.electron})
         initFeaturesApp( {logger:this.logger} )           
         this.windowManager.showLoadingWindow()
         this.checkForUpdates()

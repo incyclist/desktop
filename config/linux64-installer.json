@@ -16,7 +16,9 @@
         "category": "Games;Sports",
         "maintainer": "Guido Doumen",
         "desktop":   {
-            "name": "Incyclist"
+            "entry": {
+                "name": "Incyclist"
+            }
         } ,
         "target": ["AppImage"]
     },

@@ -5,9 +5,9 @@ const Feature = require('../base')
 const AntIpcBinding = require('./ipc-binding')
 const {AntDevice,AntServerBinding} = require('incyclist-ant-plus/lib/bindings')
 //const {} = require('incyclist-ant-plus/lib/ant-device')
-const os = require('os')
-const path = require('path')
-const fs = require('fs')
+const os = require('node:os')
+const path = require('node:path')
+const fs = require('node:fs')
 
 class AntFeature extends Feature{
     static _instance;
@@ -85,8 +85,9 @@ class AntFeature extends Feature{
         if (!this.ant) {
             return false;
         }
-        const opened = await this.ant.close()
-        return opened;
+        
+        return await this.ant.close()
+        
     }
 
     getMaxChannelsRequest() {

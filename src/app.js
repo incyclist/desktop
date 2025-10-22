@@ -1,9 +1,9 @@
 const {EventLogger,ConsoleAdapter,FileAdapter}= require('gd-eventlog')
 const { app,globalShortcut,ipcMain,crashReporter,electron,Menu,powerSaveBlocker } =  require('electron');
-const EventEmitter = require('events');
-const path = require('path')
+const EventEmitter = require('node:events');
+const path = require('node:path')
 const axios = require('axios')
-const os = require('os');
+const os = require('node:os');
 const RestLogAdapter = require('./modules/RestLogAdapter')
 const {checkDir,deleteFile,getLogDirectory,gnerateUUID} = require( './utils')
 const AutoUpdate = require('./modules/AutoUpdate')
@@ -13,6 +13,7 @@ const { restLogFilter, fileLogFilter } = require('./utils/logging');
 
 const { version,name} = require('../package.json');
 const WindowManager = require('./web/manager');
+const { getRealCPUArchitecture } = require('./utils/architecture');
 const APP_NAME = name;
 const APP_VERSION = version;
 
@@ -94,21 +95,26 @@ class IncyclistApp
 
         try {
             const platform = os.platform();
-            const arch = os.arch();
+            const binaryArch = os.arch();
             const release = os.release()
             const mem = Math.round(os.totalmem()/1024/1024/1024)+' GB';
             const type = os.type();
-            this.logger.logEvent( {message:'os info',platform,arch,type,release,mem})
+
+            const arch = getRealCPUArchitecture()
+            this.logger.logEvent( {message:'os info',platform,arch,type,release,mem, binaryArch})
             
-            this.setupCrashReporting()
 
             // the rest of the startup will be triggered once electron fires the ready event, handled by onReady()
             
         }
         catch(err) {
             this.logger.logEvent( {message:'Exception',fn:'app.checkSingleInstance()#os',error:err.message,stack:err.stack})
-
         }
+
+        
+        this.setupCrashReporting()
+        
+
         this.state.ready = true;    
     }
 
@@ -191,14 +197,19 @@ class IncyclistApp
 
 
     setupCrashReporting() {
-        const submitURL = this.getLoggingUrl().replace('/log','/crash')
-        crashReporter.start({ 
-            submitURL,
-            uploadToServer: true,   
-            compress:true                       
-        });
-        crashReporter.addExtraParameter('uuid',this.settings.uuid)
-        crashReporter.addExtraParameter('appVersion',version)
+        try {
+            const submitURL = this.getLoggingUrl().replace('/log','/crash')
+            crashReporter.start({ 
+                submitURL,
+                uploadToServer: true,   
+                compress:true                       
+            });
+            crashReporter.addExtraParameter('uuid',this.settings.uuid)
+            crashReporter.addExtraParameter('appVersion',version)
+        }
+        catch(err) {
+            this.logger.logEvent({message:'Error', fn:'setupCrashReporting', error:err.message, stack:err.stack})
+        }
     }
 
 

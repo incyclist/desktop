@@ -26,7 +26,7 @@ class MainWindow {
         }
 
         this.iconUrl = path.join(getSourceDir() ,"./public/favicon.ico");
-        this.preloadUrl = path.join(getSourceDir() ,"./web/preload.js");
+        this.preloadUrl = path.join(getSourceDir() ,"./web/mainPreload.js");
 
         this.logger = new EventLogger('MainWin')
         this.logger.set({'event-type':'lifecycle'})

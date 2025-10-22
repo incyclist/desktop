@@ -1,27 +1,44 @@
-const EventEmitter = require('events');
+const EventEmitter = require('node:events');
 const { EventLogger } = require('gd-eventlog');
-const http = require('http')
-const https = require('https')
-const fs = require('fs');
+const http = require('node:http')
+const https = require('node:https')
+const fs = require('node:fs');
 const { ipcSendEvent } = require('../utils');
-const { timeStamp } = require('console');
 
 class DownloadSession extends EventEmitter {
        
-    constructor(id,url,fileName, props={}){
+    constructor(id,url,fileNameOrStream, props={}){
         super();
         this.id = id;
         this.url = url;
-        this.fileName = props.isStream ? undefined: fileName
-        this.writeStream = props.isStream ? fileName: undefined
+        this.fileName = props.isStream ? undefined: fileNameOrStream
+        this.writeStream = props.isStream ? fileNameOrStream: undefined
         this.totalSize = props.size
         this.logger = props.logger || new EventLogger('DownloadSession')
         this.logger.set( {id:this.id, url: this.url})
 
         this.isStopped = false;
+        this.isStopRequested = false
         this.props=props;
+        this.onWriteStreamClosedHandler = this.onWriteStreamClosed.bind(this)
+        this.onWriteStreamErrorHandler = this.onWriteStreamError.bind(this)
 
     }
+
+    onWriteStreamClosed() {
+        this.isStopped = true;
+        if (this.isStopRequested) {
+            this.isStopRequested = false
+            return
+        }
+        this.emit('done')
+    }
+    onWriteStreamError() {
+        this.isStopped = true;
+        this.emit('error', new Error('Could not save video - error writing to file' ))
+    }
+
+
 
     async start() {
         try {
@@ -29,16 +46,14 @@ class DownloadSession extends EventEmitter {
             let tsPrevProgressEmit = undefined
             let bytes = 0;
             let speed = undefined
-            let writeStream = null;;
+            let received = 0;
 
             
             const client = this.url.startsWith('https://') ? https : http
 
             const fetch = async (url) => new Promise ( done=> {
                 this.request = client.get(url, res=> { 
-                    //console.log( '~~~ status Code',res.statusCode)
-                    //console.log( '~~~ headers',res.headers)
-                        done(res) 
+                    done(res) 
                 })
             })
 
@@ -49,21 +64,31 @@ class DownloadSession extends EventEmitter {
                 
                 const total = res.headers['content-length'] || this.totalSize
 
-                let received = 0;
 
                 if (res.statusCode===200) {
                     this.emit('started',this.id)  
-                    writeStream = this.props.isStream ? this.writeStream :  fs.createWriteStream(this.fileName);
-                    writeStream.on('close',()=>{
-                        this.isStopped = true;
-                        this.emit('done')
-                    })
-                    writeStream.on('error',err =>{
-                        this.isStopped = true;
-                        this.emit('error', new Error('Could not save video - error writing to file' ))
-                    })
+                    if (this.props.isStream && this.writeStream) {
+                        this.writeStream.off('close',this.onWriteStreamClosedHandler)
+                        this.writeStream.off('error',this.onWriteStreamErrorHandler)
+                        this.logger.logEvent({message:'using existing write stream'})                    
+                    }
+                    else {
+                        if (this.fileName) {
+                            this.writeStream = fs.createWriteStream(this.fileName);                        
+                            this.logger.logEvent({message:'create write stream', fileName:this.fileName})                    
+                        }
+                        else {
+                            if (!this.writeStream) {
+                                this.logger.logEvent({message:'no write stream exists'})                    
+                                this.emit('error',new Error('Failed to create writing stream' ))
+                                return
+                            }
+                        }
+                    }
 
-                    this.logger.logEvent({message:'create write stream', fileName:this.fileName})                    
+                    this.writeStream.on('close',this.onWriteStreamClosedHandler)
+                    this.writeStream.on('error',this.onWriteStreamErrorHandler)
+
                 }
                 else if (res.statusCode===301) { 
                     try {
@@ -84,19 +109,20 @@ class DownloadSession extends EventEmitter {
                     return;
                 }
 
-                if (!writeStream) {
+                if (!this.writeStream) {
                     this.emit('error', new Error('Could not save video' ))
                     return;
                 }
 
                 res.on('data',(chunk)=>{
+
                     if (this.isStopped)
                         return
-                    
-                    if (writeStream) {
+
+                    if (this.writeStream) {
                         const buffer = Buffer.from(chunk)
                         process.nextTick( ()=> {
-                            writeStream.write(buffer)
+                            this.writeStream.write(buffer)
                         })
                         
                     }
@@ -123,6 +149,7 @@ class DownloadSession extends EventEmitter {
                         this.emit('progress',pct >99 ? 99 : pct, this.speed,received ? `${(received/1024/1024).toFixed(1)} MB` : undefined, received )
                         tsPrevProgressEmit = ts;
                     }
+
                 })
 
                 res.on('abort',()=>{
@@ -160,6 +187,7 @@ class DownloadSession extends EventEmitter {
 
     stop() {
         this.isStopped = true;
+        this.isStopRequested = true;
         process.nextTick( () => {
             this.closeStream()
             if (this.request)
@@ -179,8 +207,8 @@ class DownloadSession extends EventEmitter {
             return
 
         try {
-            writeStream.end();
-            writeStream.close();
+            this.writeStream.end();
+            this.writeStream.close();
         }
         catch(err) {
             this.logger.logEvent({message:'error',fn:`start().on('end')`,error:err.message, stack:err.stack })

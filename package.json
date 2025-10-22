@@ -15,6 +15,7 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "make-linux": "electron-builder --linux --config ./config/linux64-installer.json",
+    "make-linux-arm": "electron-builder --linux --arm64 --config ./config/linuxarm64-installer.json",
     "make-mac-appstore": "export BUILD_TARGET=appstore && electron-forge make",
     "make-mac-dist": "export BUILD_TARGET=incyclist && electron-forge make",
     "make-mac-dist-arm": "export BUILD_TARGET=incyclist && electron-forge make --arch arm64",

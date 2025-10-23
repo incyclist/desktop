@@ -6,6 +6,7 @@ const path = require('path')
 const os = require('os');
 const fs = require('fs')
 const { getSecret } = require('../modules/secrets.js')
+const { getRealCPUArchitecture } = require('../utils/architecture.js')
 
 const SAVE_INTERVAL = 3000;
 const DEFAULT_LOG_SERVER_URL = process.env.ENVIRONMENT=='dev' ? 'https://localhost:5000/api/v1/log' :'https://analytics.incyclist.com/api/v1/log';
@@ -71,11 +72,12 @@ class AppSettings {
         let res ;
 
         try {
-            const arch = os.arch()
+            const binaryArch = os.arch()
+            const arch = getRealCPUArchitecture()
             const platform = os.platform()
             const release = os.release()
         
-            res= {platform, arch ,release}       
+            res= {platform, arch ,release, binaryArch}       
         }
         catch {}
 

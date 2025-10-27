@@ -41,7 +41,7 @@
     "fluent-ffmpeg": "^2.1.2",
     "gd-eventlog": "^0.1.24",
     "incyclist-ant-plus": "^0.3.6",
-    "incyclist-devices": "^2.3.35",
+    "incyclist-devices": "^2.3.38",
     "mp4frag": "^0.7.0",
     "mqtt": "^5.14.1",
     "request": "^2.88.2",

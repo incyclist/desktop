@@ -5,7 +5,7 @@ const {ipcCall, ipcSendEvent, ipcResponse,isTrue, ipcCallNoResponse,ipcHandle,ip
 const os = require('node:os');
 const { getAppDirectory } = require("../../utils");
 const { EventLogger } = require('gd-eventlog');
-const EventEmitter = require("node:events");
+const EventEmitter = require("events");
 const { ipcMain } = require("electron");
 const Peripheral = require("@stoprocent/noble/lib/peripheral");
 const Characteristic = require("@stoprocent/noble/lib/characteristic");

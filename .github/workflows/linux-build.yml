@@ -49,6 +49,7 @@ jobs:
     - run: |
        npm install       
        npm run make-linux
+       npm run make-linux-arm
        
     
     - uses: actions/upload-artifact@v4
@@ -56,4 +57,4 @@ jobs:
         name: AppImage
         path: |
           ./out/make/*.AppImage
-          ./out/make/latest-linux.yml
+          ./out/make/latest-*.yml

@@ -65,6 +65,7 @@ class AppSettings {
             saveJSONBusy: false,
             dirty: false
         }
+        this.fs = fs;       // to enable mocking in unit tests
         this.loadSettings({isInitial:true})
     }
 
@@ -179,10 +180,10 @@ class AppSettings {
         try {
             const fileName = this.getUuidFilename();
 
-            if (!fs.existsSync(fileName)) 
+            if (!this.fs.existsSync(fileName)) 
                 return undefined;
 
-            const data = fs.readFileSync(fileName)
+            const data = this.fs.readFileSync(fileName)
             const uuid = data ? data.toString() : undefined
             return uuid || undefined;
 
@@ -198,7 +199,7 @@ class AppSettings {
     writeUuidToFile(uuid) {
         try {
             const fileName = this.getUuidFilename();           
-            fs.writeFileSync(fileName,uuid,{encoding:'utf8',flag:'w'})
+            this.fs.writeFileSync(fileName,uuid,{encoding:'utf8',flag:'w'})
         }
         catch (err) {
             this.logger.logEvent({message:'error',fn:'writeUuidToFile()',error:err.message||err, stack:err.stack})
@@ -266,9 +267,9 @@ class AppSettings {
 
             if (isInitial && !fromBackup) {
                 try {
-                    if (fs.existsSync(bakName))
-                        fs.unlinkSync(bakName)
-                    fs.copyFileSync(fName,bakName)
+                    if (this.fs.existsSync(bakName))
+                        this.fs.unlinkSync(bakName)
+                    this.fs.copyFileSync(fName,bakName)
 
                 } catch (err) {
                     console.log('~~ERROR',err)
@@ -276,9 +277,9 @@ class AppSettings {
             }
             else if (isInitial && fromBackup) {
                 try {
-                    if (fs.existsSync(fName))
-                        fs.unlinkSync(fName)
-                    fs.copyFileSync(bakName,fName)
+                    if (this.fs.existsSync(fName))
+                        this.fs.unlinkSync(fName)
+                    this.fs.copyFileSync(bakName,fName)
 
                 } catch (err) {
                     console.log('~~ERROR',err)
@@ -300,8 +301,8 @@ class AppSettings {
 
     loadFile(fileName) {
         try {
-            if (fs.existsSync(fileName)) {
-                let data = fs.readFileSync(fileName)
+            if (this.fs.existsSync(fileName)) {
+                let data = this.fs.readFileSync(fileName)
                 let str = data ? data.toString() : undefined
                 if (!str) 
                     return {}
@@ -478,10 +479,10 @@ class AppSettings {
                     return;
     
                 const bakFile = fileName+'.tmp';
-                if (fs.existsSync(fileName)) {
-                    fs.copyFileSync(fileName,bakFile);
+                if (this.fs.existsSync(fileName)) {
+                    this.fs.copyFileSync(fileName,bakFile);
                 }
-                fs.writeFile(fileName,str,{encoding:'utf8',flag:'w'},(error)=>{
+                this.fs.writeFile(fileName,str,{encoding:'utf8',flag:'w'},(error)=>{
                     
                     if (error) { 
                         this.logger.logEvent({message:'JSON save error',error:error.message})
@@ -489,16 +490,16 @@ class AppSettings {
                         deleteFile(fileName);
                         
                         try {
-                            if ( fs.existsSync(bakFile))
-                                fs.copyFileSync(bakFile,fileName);
+                            if ( this.fs.existsSync(bakFile))
+                                this.fs.copyFileSync(bakFile,fileName);
                         }
                         catch( err) {
                             this.logger.logEvent({message:'JSON save Exception',error:err.message,stack:err.stack})
                         }
                     }
                     else {
-                        if ( fs.existsSync(bakFile))
-                            fs.unlinkSync(bakFile);
+                        if ( this.fs.existsSync(bakFile))
+                            this.fs.unlinkSync(bakFile);
                     }
                     this.prevDataStr = dataStr
                     this.state.saveJSONBusy = false;

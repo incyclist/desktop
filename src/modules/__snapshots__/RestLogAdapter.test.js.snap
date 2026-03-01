@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`Constructor full set of parameters 1`] = `"http://localhost:3000"`;
 
@@ -6,60 +6,60 @@ exports[`Constructor no parameters 1`] = `
 RestLogAdapter {
   "cacheDir": undefined,
   "headers": undefined,
-  "inMemoryCache": Array [],
+  "inMemoryCache": [],
   "iv": "fun",
   "logger": EventLogger {
-    "config": Object {
+    "config": {
       "name": "RestLogAdapter",
       "parent": undefined,
     },
     "context": Context {
-      "data": Object {},
+      "data": {},
       "name": "RestLogAdapter",
       "parent": Context {
-        "data": Object {},
+        "data": {},
         "name": "__global",
         "parent": undefined,
       },
     },
-    "events": Array [],
+    "events": [],
     "isBusy": false,
     "isReady": true,
     "parent": EventLogger {
-      "config": Object {
+      "config": {
         "name": "RestLogAdapter",
         "parent": undefined,
       },
       "context": Context {
-        "data": Object {},
+        "data": {},
         "name": "RestLogAdapter",
         "parent": Context {
-          "data": Object {},
+          "data": {},
           "name": "__global",
           "parent": undefined,
         },
       },
-      "events": Array [],
+      "events": [],
       "isBusy": false,
       "isReady": true,
       "parent": EventLogger {
-        "config": Object {
+        "config": {
           "name": "__global",
           "parent": undefined,
         },
         "context": Context {
-          "data": Object {},
+          "data": {},
           "name": "__global",
           "parent": undefined,
         },
-        "events": Array [],
+        "events": [],
         "isBusy": false,
         "isReady": true,
         "parent": undefined,
       },
     },
   },
-  "props": Object {},
+  "props": {},
   "sendBusy": false,
   "sendInterval": 120000,
   "url": undefined,
@@ -67,10 +67,10 @@ RestLogAdapter {
 `;
 
 exports[`log first call 1`] = `
-Array [
-  Object {
+[
+  {
     "context": "test",
-    "event": Object {
+    "event": {
       "a": 1,
     },
   },
@@ -78,22 +78,22 @@ Array [
 `;
 
 exports[`log multiple calls 1`] = `
-Array [
-  Object {
+[
+  {
     "context": "test",
-    "event": Object {
+    "event": {
       "a": 1,
     },
   },
-  Object {
+  {
     "context": "test",
-    "event": Object {
+    "event": {
       "a": 2,
     },
   },
-  Object {
+  {
     "context": "test",
-    "event": Object {
+    "event": {
       "a": 3,
     },
   },

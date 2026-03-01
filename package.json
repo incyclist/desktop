@@ -6,7 +6,9 @@
   "description": "Incyclist Desktop App",
   "main": "src/main.js",
   "scripts": {
-    "test": "jest",
+    "test":             "jest",
+    "test:integration": "jest --config jest.integration.config.js",
+    "test:all":         "jest --config jest.integration.config.js && jest",
     "bletest": "node scripts/ble",
     "coverage": "jest --coverage",
     "app-test": "playwright test --workers 1",
@@ -74,22 +76,5 @@
     "jest": "^30.2.0",
     "lnk": "^1.1.0",
     "node-abi": "^4.14.0"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(ts|js)?$",
-    "moduleNameMapper": {
-      "electron": "<rootDir>/test/mock/electron.js"
-    },
-    "roots": [
-      "<rootDir>/src"
-    ],
-    "collectCoverageFrom": [
-      "src/**/*.{js,jsx,ts,tsx}",
-      "!src/**/*.d.ts",
-      "!src/**/*.{test,tests}.{js,jsx,ts,tsx}",
-      "!src/**/*.unit.{test,tests}.{js,jsx,ts,tsx}",
-      "!src/**/*.test.util.{js,jsx,ts,tsx}"
-    ]
   }
 }

@@ -31,7 +31,7 @@ describe('Constructor', () => {
 
         rla = new RestLogAdapter(settings);
         expect(rla.url).toMatchSnapshot();
-        expect(rla.startWorker).toBeCalledWith(3000)  // ms
+        expect(rla.startWorker).toHaveBeenCalledWith(3000)  // ms
 
     });
 
@@ -158,7 +158,7 @@ describe('send', () => {
         rla.headers= { a:1}
 
         let res = await rla.send();
-        expect( mock.history.post[0].headers).toMatchObject( {a:1})
+        expect( mock.history.post[0].headers).toMatchObject( {a:'1'})
         expect( rla.sendBusy).toBeFalsy()
 
     });

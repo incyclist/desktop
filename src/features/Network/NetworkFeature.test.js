@@ -3,18 +3,19 @@ const NetworkFeature = require("./NetworkFeature")
 
 jest.mock('../utils', ()=> {
     return {
-        ipcServe: jest.fn( (event,callId,key,fn) => {
-            fn() 
-        } ),
-        ipcCall: jest.fn(),
-        ipcResponse: jest.fn()
+        ipcServe:            jest.fn((event, callId, key, fn) => { fn() }),
+        ipcCall:             jest.fn(),
+        ipcCallSync:         jest.fn(),
+        ipcResponse:         jest.fn(),
+        ipcHandleSync:       jest.fn(),
+        ipcRegisterBroadcast: jest.fn(),        
     }
 })
 const utils = require('../utils')
 
 jest.mock('./Network')
 const {scan} = require('./Network',)
-const { ipcCall, ipcResponse } = require("../utils")
+const { ipcCall, ipcResponse,ipcCallSync } = require("../utils")
 
 describe ('NetworkFeature',()=> {
 
@@ -80,7 +81,7 @@ describe ('NetworkFeature',()=> {
 
             expect(res).toBeUndefined();  // does not return anything
             expect(utils.ipcCall).toHaveBeenCalledWith('network-scan',expect.anything())    // has registered ipc-call 'network-scan'
-            expect(api.registerFeatures).toHaveBeenCalledWith(['network.scan']) ;           // has added 'network.scan' to  features array
+            expect(api.registerFeatures).toHaveBeenCalledWith(['network.scan','network.socket']) ;           // has added 'network.scan' to  features array
 
         })
         test('spec does not have registerFeatures function -> will throw an error',()=>{

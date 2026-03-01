@@ -1,6 +1,9 @@
 const AppSettings = require('./AppSettings')
 const {getValue,setValue} = require('./AppSettings')
 
+jest.mock('fs')
+const fs = require('fs')
+
 const TEST_DATA = {
     "store": {
         "book": [ 

@@ -303,6 +303,11 @@ class BLEFeature extends Feature {
                 ipcResponse(event.sender,'ble-subscribe',callId, error);
             }
         }
+        else if ( peripheral && !characteristic ) {
+            this.logger.logEvent({message:'error',fn:'subscribeRequest()',error:'characteristic not found', peripheralId, characteristicUUID, available:peripheral?.characteristics?.map(c=>c.uuid)})
+            error = new Error('characteristic not found');
+            ipcResponse(event.sender,'ble-subscribe',callId, error);
+        }
         else { 
             this.logger.logEvent({message:'error',fn:'subscribeRequest()',error:'device not found', peripheralId, characteristicUUID})
             error = new Error('device not found');
@@ -325,6 +330,9 @@ class BLEFeature extends Feature {
                 error = err;
             }
         }
+        else if ( peripheral && !characteristic ) {
+            error = new Error('characteristic not found');
+        }
         else { 
             error = new Error('device not found');
         }
@@ -342,6 +350,9 @@ class BLEFeature extends Feature {
             characteristic.read( (err,data) => {
                 ipcResponse(event.sender,'ble-read',callId, {err,data});
             });
+        }
+        else if ( peripheral && !characteristic ) {
+            error = new Error('characteristic not found');
         }
         else { 
             error = new Error('device not found');
@@ -394,6 +405,9 @@ class BLEFeature extends Feature {
     
                 })
             }
+        }
+        else if ( peripheral && !characteristic ) {
+            error = new Error('characteristic not found');
         }
         else { 
             throw new Error('device not found');

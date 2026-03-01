@@ -699,11 +699,12 @@ class WinrtBindings extends events.EventEmitter {
         const subscription = this._subscriptions[message.subscriptionId];
         if (subscription) {
             const { address, service, characteristic } = subscription;
-            const data = message.value ? Buffer.from(message.value).toString('hex') : message.value;
+            const data = typeof message.value === 'string' ? Buffer.from(message.value, 'hex') : Buffer.from(message.value);
+
             if (this.bleServerDebug)
                 this.logEvent({ message: 'BLEserver in:', type: 'notify', address, service: uuid(service), characteristic: uuid(characteristic), data });
 
-            this.emit('read', address, service, characteristic, Buffer.from(message.value), true);
+            this.emit('read', address, service, characteristic, data, true);
         }
     }
 

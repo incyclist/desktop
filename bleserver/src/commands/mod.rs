@@ -5,6 +5,8 @@ mod disconnect;
 mod services;
 mod characteristics;
 mod subscribe;
+mod read;
+mod write;
 
 use anyhow::Result;
 use serde_json::{Value,json};
@@ -80,7 +82,10 @@ pub async fn handle(cmd: Value, adapter: &Adapter, out: &IpcWriter) -> Result<()
         "disconnect"   => disconnect::handle(cmd, adapter, out).await?,
         "services" => services::handle(cmd, adapter, out).await?,
         "characteristics" => characteristics::handle(cmd, adapter, out).await?,
-        "subscribe" => subscribe::handle(cmd, adapter, out).await?,
+        "subscribe" | "unsubscribe" => subscribe::handle(cmd, adapter, out).await?,
+        "read"  => read::handle(cmd, adapter, out).await?,
+        "write"  => write::handle(cmd, adapter, out).await?,
+        
         _ => {
             let err = serde_json::json!({
                 "_type": "error",

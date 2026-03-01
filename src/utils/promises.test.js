@@ -1,6 +1,8 @@
-const { sleep } = require("incyclist-devices/lib/utils/utils")
 const NamedPromise  = require("./promises")
 
+const sleep = (ms) => { 
+    return new Promise( resolve => setTimeout(resolve, ms))
+};
 describe ('promises',()=>{
     describe('exec',()=>{
 

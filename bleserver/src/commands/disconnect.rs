@@ -3,6 +3,7 @@ use serde_json::json;
 use serde_json::Value;
 use btleplug::api::Peripheral as _;
 use btleplug::platform::Adapter;
+use crate::commands::subscribe::cleanup;
 use crate::ipc::{IpcWriter, send_event};
 
 use super::{make_response, extract_normalized_address,find_peripheral_by_normalized};
@@ -21,9 +22,12 @@ pub async fn handle(cmd: Value, adapter: &Adapter, out: &IpcWriter) -> Result<()
     };
 
     match find_peripheral_by_normalized(adapter, &norm).await {
-        Ok(Some((peripheral, _formatted))) => {
+        Ok(Some((peripheral, address))) => {
             if let Err(e) = peripheral.disconnect().await {
                 obj["error"] = json!(format!("disconnect failed: {}", e));
+            }
+            else {
+                cleanup(address);
             }
         }
         Ok(None) => {

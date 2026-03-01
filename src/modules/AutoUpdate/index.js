@@ -7,12 +7,13 @@ const path=require('path')
 const os = require('os');
 const fs = require('fs');
 const {rm,rename} = require('fs/promises')
-const { sleep } = require("incyclist-devices/lib/utils/utils");
 const EventEmitter = require("events");
 const UpdaterFactory = require("./binding/factory");
 const { AppInfo, checkDir } = require("../../utils");
 
-
+const sleep = (ms) => { 
+    return new Promise( resolve => setTimeout(resolve, ms))
+};
 const TIMEOUT_WEB_CHECK = 1500
 const TIMEOUT_WEB_DOWNLOAD = 5000
 const TIMEOUT_APP_CHECK = 3000

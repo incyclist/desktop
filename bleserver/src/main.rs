@@ -23,6 +23,9 @@ async fn main() -> Result<()> {
     tokio::spawn(ble::events::handle_events(adapter.clone(), event_rx, ipc_writer.clone()));
 
     // Command loop
+    // This will manage the IPC to the calling Incyclist app
+    // commands are exchanged via stdin and stdout (i.e. console)
+    // commands consist of a length-prefixed JSON object
     while let Some(cmd) = ipc_reader.recv().await {
         commands::handle(cmd, &adapter, &ipc_writer).await?;
     }

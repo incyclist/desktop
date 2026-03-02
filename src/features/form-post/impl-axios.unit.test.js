@@ -1,4 +1,4 @@
-const RequestForm = require("./impl-requestlib")
+const RequestForm = require("./impl-axios")
 
 const testOpts = {
     url: 'https://www.strava.com/api/v3/uploads',
@@ -18,7 +18,7 @@ const uploadInfo =  {
 }
 
 
-describe( 'FormPost Feature: RequestLib Implementation',()=>{
+describe( 'FormPost Feature: Axios Implementation',()=>{
 
     describe ('createForm',()=>{
         test('normal request',async ()=>{

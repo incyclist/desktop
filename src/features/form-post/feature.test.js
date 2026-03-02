@@ -3,7 +3,7 @@
  *
  * Strategy
  * --------
- * - Use the REAL impl-requestlib so the tests reflect what the current
+ * - Use the REAL impl-axios so the tests reflect what the current
  *   implementation actually does.
  * - Mock only at the I/O boundary:
  *     • `request.post`  – the outgoing HTTP call
@@ -24,7 +24,7 @@ const axios = require('axios')
 jest.mock('fs/promises')
 const fs = require('fs/promises')
 
-// ── Subject under test (uses the real impl-requestlib internally) ────────────
+// ── Subject under test (uses the real impl-axios internally) ────────────
 const FormPostFeature = require('./feature')
 
 
@@ -62,7 +62,7 @@ const mockHttpNetworkFailure = (message = 'connect ECONNREFUSED') => {
 
 // ─── suite ──────────────────────────────────────────────────────────────────
 
-describe('FormPostFeature – behaviour against impl-requestlib', () => {
+describe('FormPostFeature – behaviour against impl-axios', () => {
 
     let feature
 
@@ -136,7 +136,7 @@ describe('FormPostFeature – behaviour against impl-requestlib', () => {
             const uploadInfo = { doc: { type: 'file', fileName: '/missing.pdf' } }
             const opts = { url: 'https://x.com' }
 
-            // impl-requestlib catches the error internally and returns opts anyway
+            // impl-axios catches the error internally and returns opts anyway
             const result = await feature.createFormRequest(opts, uploadInfo)
             expect(result.id).toBeDefined()
         })

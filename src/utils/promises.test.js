@@ -1,6 +1,5 @@
-const { sleep } = require("incyclist-devices/lib/utils/utils")
 const NamedPromise  = require("./promises")
-
+const {sleep} = require('../utils/sleep')
 describe ('promises',()=>{
     describe('exec',()=>{
 

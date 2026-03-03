@@ -21,6 +21,7 @@ src/node_modules/
 workspace.*
 .vscode
 .vscode/*
+.idea
 .log
 .log.*
 .log-*

@@ -1,7 +1,7 @@
 const Feature = require('../base');
 const {ipcMain} = require('electron');
 const {ipcCall, ipcHandle } = require ('../utils');
-const RequestForm = require('./impl-requestlib');
+const RequestForm = require('./impl-axios');
 
 class FormPostFeature extends Feature{
 

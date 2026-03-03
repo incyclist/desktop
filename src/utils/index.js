@@ -2,10 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const {app} = require('electron');
 const {version,name} = require('../../package.json');
-const { v4 } = require('uuid');
+
+const { randomUUID } = require('crypto');
+
+const gnerateUUID = () => { return randomUUID() };
 
 
-const gnerateUUID = () => { return v4()};
 
 class AppInfo {
 

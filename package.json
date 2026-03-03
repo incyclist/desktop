@@ -51,7 +51,6 @@
     "serialport": "^10.5.0",
     "update-electron-app": "^3.1.2",
     "usb": "^2.17.0",
-    "uuid": "^11.1.0",
     "yauzl": "^3.2.0"
   },
   "devDependencies": {

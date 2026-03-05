@@ -363,7 +363,7 @@ describe('loadFromMemoryCache', () => {
         rla = new RestLogAdapter({sendInterval:1000}) // every 1000s
     })
     afterEach( ()=> {       
-        if (rla && rla.iv) {
+        if (rla?.iv) {
             clearInterval(rla.iv)
         }
     })

@@ -225,13 +225,14 @@ describe('startWorker', ()=> {
 
     afterEach( ()=> {
         jest.clearAllMocks();
+        jest.clearAllTimers();
         if (rla && rla.iv)
             clearInterval(rla.iv)
     })
 
     afterAll( ()=> {
         jest.runOnlyPendingTimers();
-        jest.useRealTimers()
+        jest.useRealTimers();
         RestLogAdapter.prototype.send = original;
     })
 
@@ -269,6 +270,7 @@ describe('stop', ()=> {
     afterEach( ()=> {
         
         jest.clearAllMocks();
+        jest.clearAllTimers();
 
         if (rla && rla.iv)
             clearInterval(rla.iv)
@@ -276,7 +278,7 @@ describe('stop', ()=> {
 
     afterAll( ()=> {
         jest.runOnlyPendingTimers();
-        jest.useRealTimers()
+        jest.useRealTimers();
         RestLogAdapter.prototype.send = original;
     })
 
@@ -361,7 +363,7 @@ describe('loadFromMemoryCache', () => {
         rla = new RestLogAdapter({sendInterval:1000}) // every 1000s
     })
     afterEach( ()=> {       
-        if (rla & rla.iv) {
+        if (rla && rla.iv) {
             clearInterval(rla.iv)
         }
     })

@@ -10,16 +10,19 @@ describe ('promises',()=>{
 
             const res = await NamedPromise.exec('test')
             expect(res).toBe(10)
-            
-            
         })
 
         test('with timeout',async ()=>{
+            jest.useFakeTimers()
             NamedPromise.add('test', sleep(1000))
 
-            const tsStart = Date.now()
-            await expect( async ()=>{ await NamedPromise.exec('test',30) }).rejects.toThrow('timeout')
+            const promise = NamedPromise.exec('test',30)
             
+            jest.advanceTimersByTime(30)
+            
+            await expect(promise).rejects.toThrow('timeout')
+            
+            jest.useRealTimers()
         })
     })
 })

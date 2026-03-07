@@ -81,6 +81,12 @@ class NativeUISupport extends Feature {
 
   }
 
+  confirmExit() {
+    let win = app.incyclistApp.getWindowManager().getActiveWindow();
+    win?.destroy()
+
+  }
+
   showItemInFolder(filename) {
     try {
         shell.showItemInFolder(filename)
@@ -131,7 +137,7 @@ class NativeUISupport extends Feature {
     ipcHandle('ui-quit',this.quitRequest.bind(this),ipcMain)
     ipcHandle('ui-take-screenshot',this.takeScreenshot.bind(this),ipcMain)
     ipcHandle('ui-open-window',this.openWindow.bind(this),ipcMain)
-
+    ipcHandle('ui-confirm-exit',this.confirmExit.bind(this),ipcMain)
     ipcHandleNoResponse('ipc-sendBroadcast', this.sendBroadcast.bind(this),ipcMain)
 
 
@@ -153,6 +159,8 @@ class NativeUISupport extends Feature {
     spec.ui.quit                 = ipcCall('ui-quit',ipcRenderer)
     spec.ui.takeScreenshot       = ipcCall('ui-take-screenshot',ipcRenderer)
     spec.ui.openWindow           = ipcCall('ui-open-window',ipcRenderer)
+    
+    spec.ui.confirmExit         = ipcCall('ui-confirm-exit',ipcRenderer)
 
     spec.ipc={}
     spec.ipc.sendBroadcast       = ipcCallNoResponse('ipc-sendBroadcast',ipcRenderer)
@@ -160,7 +168,7 @@ class NativeUISupport extends Feature {
 
     spec.registerFeatures( [
         'shell.showItemInFolder', 'shell.openPath', 'shell.openExternal', 'shell.beep', 
-        'ui.screensaver','ui.toggleFullSccreen', 'ui.quit', 'ui.screenshot',
+        'ui.screensaver','ui.toggleFullSccreen', 'ui.quit', 'ui.screenshot','ui.confirmExit',
         'ipc.broadcast'
     ] )
   }

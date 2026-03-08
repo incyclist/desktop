@@ -15,6 +15,18 @@ jest.mock('../zip',()=>{
 
 
 describe( 'AutoUpdate',()=> {
+    beforeAll(() => {
+        jest.useFakeTimers()
+    })
+
+    afterAll(() => {
+        jest.useRealTimers()
+    })
+
+    afterEach(() => {
+        jest.runOnlyPendingTimers()
+        jest.clearAllTimers()
+    })
 
     describe('performWebUpdateCheck',()=>{
 
@@ -31,7 +43,6 @@ describe( 'AutoUpdate',()=> {
                 getAppDirectory: jest.fn(()=>'./test/out') 
             }
             a = new AutoUpdate(app);
-
         })
         afterEach( ()=>{
             jest.unmock('axios')
@@ -75,18 +86,24 @@ describe( 'AutoUpdate',()=> {
                 await new Promise ( done=> setTimeout(done,100))
                 return Promise.resolve({data})
             })
-            const res = await a.performWebUpdateCheck()
+            const promise = a.performWebUpdateCheck()
+            
+            // Fast-forward time to trigger timeout
+            jest.advanceTimersByTime(10)
+            
+            const res = await promise
             expect(res.available).toBeUndefined()
             expect(res.timeout).toBe(true)
             expect(res.data).toBeUndefined()
             expect(res.promise).toBeDefined()
 
+            // Fast-forward time to complete the delayed axios call
+            jest.advanceTimersByTime(100)
+            
             const res1 = await res.promise
             expect(res1.available).toBe(true)
             expect(res1.data).toBe(data)
             expect(res1.promise).toBeUndefined()
-
-            
         })
 
     })
@@ -166,9 +183,12 @@ describe( 'AutoUpdate',()=> {
 
             a.getAppTimeout = jest.fn().mockReturnValue(10)
             
-
+            const promise = a.performAppUpdateCheck()
             
-            const res = await a.performAppUpdateCheck()
+            // Fast-forward time to trigger timeout
+            jest.advanceTimersByTime(10)
+            
+            const res = await promise
             expect(res.available).toBe(undefined)
             expect(res.timeout).toBe(true)
             expect(res.promise).toBeDefined()
@@ -227,13 +247,11 @@ describe( 'AutoUpdate',()=> {
             
             a.updateAppForCurrentLaunch()
 
-            const pause = ()=>new Promise(done=>setTimeout(done,100))
-            await pause()
+            // Fast-forward time to trigger the update-downloaded event
+            jest.advanceTimersByTime(50)
 
             expect(mock.quitAndInstall).toHaveBeenCalled()
             expect(a.emit).toHaveBeenCalledWith('app-relaunch')
-
-            
         })
 
 

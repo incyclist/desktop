@@ -71,7 +71,7 @@
     "axios-mock-adapter": "^2.1.0",
     "bindings": "^1.5.0",
     "dotenv": "^17.3.1",
-    "electron": "^37.10.3",
+    "electron": "^40.8.0",
     "electron-builder": "^26.8.1",
     "form-data": "^4.0.5",
     "incyclist-devices": "^3.0.9",

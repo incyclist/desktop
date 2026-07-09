@@ -42,7 +42,7 @@ class IncyclistApp
         this.environment  = process.env.ENVIRONMENT ?? "prod";
         
         app.incyclistApp = this
-        app.allowRendererProcessReuse=false;  
+
         if (process.platform==='darwin') {
             Menu.setApplicationMenu(null);
         }
@@ -131,7 +131,7 @@ class IncyclistApp
 
         app.on('before-quit', (e)=> this.onBeforeQuit(e))
         app.on('will-quit', (e) => this.onWillQuit(e))
-        app.on('session-created', (_event,session) => this.onSessionCreated(session) )
+        app.on('session-created', (session) => this.onSessionCreated(session) )
 
         ipcMain.on ('app-broadcast',this.onAppBroadcast.bind(this) )
         ipcMain.on ('errorInWindow',(event,source,err)=>this.onCrash(event,source,err) )

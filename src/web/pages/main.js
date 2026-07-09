@@ -56,7 +56,7 @@ class MainWindow {
             minHeight:600,
             useContentSize :true,
             allowRunningInsecureContent :true,
-            enableRemoteModule:false,
+
             resizable:true,
             webPreferences: {
                 webSecurity:false, 

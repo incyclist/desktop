@@ -13,6 +13,7 @@
     "coverage": "jest --coverage",
     "app-test": "playwright test --workers 1",
     "start": "electron ./",
+    "dev": "DEBUG=1  electron ./",
     "forge-start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",

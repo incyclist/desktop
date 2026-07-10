@@ -5,7 +5,6 @@ const { EventLogger } = require( 'gd-eventlog')
 const path = require('path')
 const os = require('os');
 const fs = require('fs')
-const { getSecret } = require('../modules/secrets.js')
 const { getRealCPUArchitecture } = require('../utils/architecture.js')
 
 const SAVE_INTERVAL = 3000;
@@ -95,15 +94,6 @@ class AppSettings {
     
     
     
-    getSecretValue(event,callId, key, defValue ) {
-        const value = getSecret(key) || defValue;
-        if ( event) {
-            ipcResponse(event.sender,'appSettings-getSecret',callId,value)
-        }
-    }
-    
-        
-
     static getValue ( settings, key, defValue ) {
         const clone = (obj) => JSON.parse(JSON.stringify(obj));
         const valid = (v) => v!==undefined && v!==null;
@@ -625,7 +615,6 @@ class AppSettings {
         ipcMain.on('appSettings-save',(event,callId,values) => settings.saveRequest(event,callId,values));
         ipcMain.on('appSettings-overwrite',(event,callId,values) => settings.overwriteRequest(event,callId,values));
         ipcMain.on('appSettings-getOS',(event,callId) => settings.getOS(event,callId));
-        ipcMain.on('appSettings-getSecret',(event,callId,key,defValue) => settings.getSecretValue(event,callId,key,defValue));
 
         ipcHandleSync('appSettings-getOSSync',()=>settings.getOSSync(),ipcMain)
         ipcHandleSync('appSettings-getAppInfo',getAppInfo,ipcMain)
@@ -642,13 +631,12 @@ class AppSettings {
         spec.appSettings.save        = ipcCall('appSettings-save',ipcRenderer,{debug})
         spec.appSettings.overwrite   = ipcCall('appSettings-overwrite',ipcRenderer,{debug})
         spec.appSettings.getOS       = ipcCall('appSettings-getOS',ipcRenderer,{debug})
-        spec.appSettings.getSecret   = ipcCall('appSettings-getSecret',ipcRenderer,{debug})
 
         spec.appSettings.getOSSync   = ipcCallSync('appSettings-getOSSync',ipcRenderer,{debug})
         spec.appSettings.getAppInfo  = ipcCallSync('appSettings-getAppInfo',ipcRenderer,{debug})
 
         spec.registerFeatures( [
-            'appSettings' , 'appSettings.secret' , 'appSettings.os', 'appSettings.os.v2', 'appSettings.secret.v2', 'appSettings.appInfo', 'appSettings.overwrite',
+            'appSettings', 'appSettings.os', 'appSettings.os.v2', 'appSettings.appInfo', 'appSettings.overwrite',
         ] )
     }
    

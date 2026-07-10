@@ -27,6 +27,7 @@ workspace.*
 .log-*
 settings.json
 logfile.json
+src/.settings/
 **/secrets.json
 app/.settings/
 bin/*/ergoapp.node

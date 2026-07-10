@@ -20,11 +20,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Retrieve the secret and write it to a file
-      env:
-        SECRET_FILE: ${{ secrets.SECRET_FILE }}
-      run: |
-        echo $SECRET_FILE > ./src/secrets.json
 
     - uses: actions/setup-python@v5
       with:

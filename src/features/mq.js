@@ -2,7 +2,7 @@ const {ipcMain} = require('electron');
 const {EventLogger } = require('gd-eventlog');
 const {ipcCall, ipcSendEvent, ipcResponse,isTrue} = require ('./utils/index.js')
 const Feature = require('./base.js')
-const { getSecret } = require('../modules/secrets.js')
+const SecretsFeature = require('./secrets/feature')
 const mqtt = require('mqtt');
 const Prom = require('../utils/promises.js');
 
@@ -27,10 +27,6 @@ class MessageQueueFeature extends Feature{
         this.subscriptions = [];
         this.messages = []
         this.retryCount = 0;
-
-        this.broker = getSecret('MQ_BROKER');
-        this.username = getSecret('MQ_USER');
-        this.password = getSecret('MQ_PASSWORD');
     } 
 
     static getInstance() {
@@ -77,6 +73,17 @@ class MessageQueueFeature extends Feature{
     }
 
     async _doConnect() {
+        this.broker = SecretsFeature.getInstance().getSecret('MQ_BROKER');
+        this.username = SecretsFeature.getInstance().getSecret('MQ_USER');
+        this.password = SecretsFeature.getInstance().getSecret('MQ_PASSWORD');
+
+        if (!this.broker) {
+            if (this.retryCount === 0)
+                this.logger.logEvent({ message: 'MQTT broker not configured — MQ_BROKER secret missing', level: 'warn' });
+            this.connecting = false;
+            return;
+        }
+
         this.retryCount++;
         if( this.retryCount<=1)
             this.logger.logEvent( {message:`connecting to mqtt broker ${this.broker}`});

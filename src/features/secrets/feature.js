@@ -1,8 +1,8 @@
 const { safeStorage, app, powerMonitor, net, ipcMain } = require('electron')
-const fs = require('fs')
-const path = require('path')
-const crypto = require('crypto')
-const os = require('os')
+const fs = require('node:fs')
+const path = require('node:path')
+const crypto = require('node:crypto')
+const os = require('node:os')
 const { EventLogger } = require('gd-eventlog')
 const Feature = require('../base')
 const { ipcHandleSync, ipcCallSync } = require('../utils/index.js')
@@ -54,7 +54,7 @@ class SecretsFeature extends Feature {
         return this.currentStatus;
     }
 
-    async init(opts = { timeout: 5000 }) {
+    async init({ timeout = 5000 } = {}) {
         if (!this._isProd()) {
             this.logger.logEvent({ message: 'skipping secret update', reason: 'non-prod build' });
             this._logDevSecretsSource();
@@ -68,7 +68,7 @@ class SecretsFeature extends Feature {
 
         const result = await Promise.race([
             this.initPromise,
-            new Promise(resolve => setTimeout(() => resolve(this.currentStatus), opts.timeout)),
+            new Promise(resolve => setTimeout(() => resolve(this.currentStatus), timeout)),
         ]);
         this.initPromise = null;
         this._startRetry();

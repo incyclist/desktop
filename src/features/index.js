@@ -1,3 +1,4 @@
+const SecretsFeature = require('./secrets/feature').getInstance();
 const FormPost = require('./form-post').getInstance();
 const FileSelection = require('./FileSelection')
 const IncyclistScheme = require('./IncyclistScheme')
@@ -18,9 +19,10 @@ const Crypto = require('./crypto').getInstance()
 const {ObserverHandler} = require('./utils/observer')
 
 function initFeaturesApp( props ) {
-    
+
     ObserverHandler.getInstance().register()
 
+    SecretsFeature.register(props);
     FileSelection.register(props);
     IncyclistScheme.register(props);
     VideoScheme.register(props);
@@ -58,6 +60,7 @@ function initFeaturesWeb( electron,ipcRenderer) {
     electron.registerFeature('ipc-samems-fix')
 
     // New API
+    SecretsFeature.registerRenderer(electron,ipcRenderer);
     FileSelection.registerRenderer(electron,ipcRenderer)
     IncyclistScheme.registerRenderer(electron,ipcRenderer)
     FormPost.registerRenderer(electron,ipcRenderer);

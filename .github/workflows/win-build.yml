@@ -22,14 +22,6 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Retrieve the secret and write it to a file
-      shell: pwsh    
-      env:
-        SECRET_FILE: ${{ secrets.SECRET_FILE }}
-      run: |
-        $env:SECRET_FILE | Out-File .\src\secrets.json        
-        dir .\src
-
     - name: Retrieve the settings and write them to a file
       shell: pwsh    
       env:

@@ -7,7 +7,8 @@ const os = require('node:os');
 const RestLogAdapter = require('./modules/RestLogAdapter')
 const {checkDir,deleteFile,getLogDirectory,gnerateUUID} = require( './utils')
 const AutoUpdate = require('./modules/AutoUpdate')
-const {initFeaturesApp} = require('./features'); 
+const {initFeaturesApp} = require('./features');
+const SecretsFeature = require('./features/secrets/feature');
 const AppSettings  = require('./features/AppSettings');
 const { restLogFilter, fileLogFilter } = require('./utils/logging');
 
@@ -144,7 +145,8 @@ class IncyclistApp
         }
 
         this.logger.logEvent({message:'app event',event:'ready', electron:process.versions.electron})
-        initFeaturesApp( {logger:this.logger} )           
+        await SecretsFeature.getInstance().init({ timeout: 5000 })
+        initFeaturesApp( {logger:this.logger} )
         this.windowManager.showLoadingWindow()
         this.checkForUpdates()
 

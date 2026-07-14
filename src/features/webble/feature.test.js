@@ -555,6 +555,77 @@ describe('WebBleFeature — register', () => {
 
 })
 
+describe('WebBleFeature — register (platform gating)', () => {
+
+    const withPlatform = (platform, fn) => {
+        const original = process.platform
+        Object.defineProperty(process, 'platform', { value: platform, configurable: true })
+        try {
+            fn()
+        } finally {
+            Object.defineProperty(process, 'platform', { value: original, configurable: true })
+        }
+    }
+
+    test('registers on linux (no native BLE binding available)', () => {
+        withPlatform('linux', () => {
+            const feature = WebBleFeature.getInstance()
+            feature.register({})
+            expect(app.on).toHaveBeenCalledWith('web-contents-created', expect.any(Function))
+        })
+    })
+
+    test('registers on win32 too — announced so web-ui can opt testers in via a feature toggle', () => {
+        withPlatform('win32', () => {
+            const feature = WebBleFeature.getInstance()
+            feature.register({})
+            expect(app.on).toHaveBeenCalledWith('web-contents-created', expect.any(Function))
+        })
+    })
+
+    test('does not register on other platforms (e.g. darwin)', () => {
+        withPlatform('darwin', () => {
+            const feature = WebBleFeature.getInstance()
+            feature.register({})
+            expect(app.on).not.toHaveBeenCalled()
+        })
+    })
+
+})
+
+describe('WebBleFeature — registerRenderer (platform gating)', () => {
+
+    const withPlatform = (platform, fn) => {
+        const original = process.platform
+        Object.defineProperty(process, 'platform', { value: platform, configurable: true })
+        try {
+            fn()
+        } finally {
+            Object.defineProperty(process, 'platform', { value: original, configurable: true })
+        }
+    }
+
+    test('announces webble capabilities on win32', () => {
+        withPlatform('win32', () => {
+            const spec = { registerFeatures: jest.fn() }
+            const feature = WebBleFeature.getInstance()
+            feature.registerRenderer(spec, { send: jest.fn(), on: jest.fn(), removeAllListeners: jest.fn() })
+            expect(spec.registerFeatures).toHaveBeenCalledWith(['webble', 'webble-services'])
+        })
+    })
+
+    test('does not populate spec.webble on darwin', () => {
+        withPlatform('darwin', () => {
+            const spec = { registerFeatures: jest.fn() }
+            const feature = WebBleFeature.getInstance()
+            feature.registerRenderer(spec, { send: jest.fn(), on: jest.fn(), removeAllListeners: jest.fn() })
+            expect(spec.webble).toBeUndefined()
+            expect(spec.registerFeatures).not.toHaveBeenCalled()
+        })
+    })
+
+})
+
 describe('WebBleFeature — registerRenderer', () => {
 
     let spec, ipcRenderer

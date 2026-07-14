@@ -10,7 +10,7 @@ const CONNECT_TARGET_TIMEOUT = 30 * 1000
 // as the default and stable path — WebBLE is announced there too so web-ui can opt
 // specific users into it behind a feature toggle, without desktop needing to know
 // about that toggle itself.
-const SUPPORTED_PLATFORMS = ['linux', 'win32']
+const SUPPORTED_PLATFORMS = new Set(['linux', 'win32'])
 
 class WebBleFeature extends Feature {
     static _instance
@@ -246,7 +246,7 @@ class WebBleFeature extends Feature {
     }
 
     register(_props) {
-        if (!SUPPORTED_PLATFORMS.includes(process.platform)) {
+        if (!SUPPORTED_PLATFORMS.has(process.platform)) {
             return;
         }
         this.logger.logEvent({ message: 'register' })
@@ -265,7 +265,7 @@ class WebBleFeature extends Feature {
     }
 
     registerRenderer(spec, ipcRenderer) {
-        if (!SUPPORTED_PLATFORMS.includes(process.platform)) {
+        if (!SUPPORTED_PLATFORMS.has(process.platform)) {
             return;
         }
 

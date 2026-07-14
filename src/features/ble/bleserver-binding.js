@@ -72,7 +72,16 @@ class WinrtBindings extends events.EventEmitter {
         this.bleServerDebug = props.bleServerDebug || true
         this.loggingPaused = false
         this.advertisements = {}
-       
+
+        // Stores of the in-flight/settled discovery request per address (services) and
+        // per address+service (characteristics), so repeated discovery calls for the
+        // same connected device share a single round-trip; cleared on disconnect.
+        // Concurrent discovery of *different* services/characteristics is intentional
+        // and WinRT handles it fine (these are independent async operations) — only
+        // duplicate/identical requests are coalesced here, nothing is serialized.
+        this._servicesRequests = new Map();
+        this._characteristicsRequests = new Map();
+
     }
 
     static getInstance(appDirectory,props={}) {
@@ -250,7 +259,9 @@ class WinrtBindings extends events.EventEmitter {
                 this._requestId = 0;
                 this._requests = {};
                 this._subscriptions = {};
-        
+                this._servicesRequests.clear();
+                this._characteristicsRequests.clear();
+
                 this.launchBleServer()
             }            
         });
@@ -293,8 +304,10 @@ class WinrtBindings extends events.EventEmitter {
         this._requestId = 0;
         this._requests = {};
         this._subscriptions = {};
+        this._servicesRequests.clear();
+        this._characteristicsRequests.clear();
 
-        
+
         this.initApp();
     
         this.logEvent({message:'init',app:this.app });
@@ -336,6 +349,61 @@ class WinrtBindings extends events.EventEmitter {
         this._sendMessage({ cmd: 'stopScan' });
     }
 
+    _clearRequestsForAddress(address) {
+        this._servicesRequests.delete(address);
+        const prefix = `${address}::`;
+        for (const key of this._characteristicsRequests.keys()) {
+            if (key.startsWith(prefix))
+                this._characteristicsRequests.delete(key);
+        }
+    }
+
+    // Fetches the raw (unfiltered) services list from the device. _servicesRequests holds
+    // one request (promise) per address, so concurrent *identical* requests (same address)
+    // are coalesced onto the same in-flight round-trip, and repeated discovery calls for
+    // the same connected device reuse it once it settles. Cleared on disconnect.
+    // Concurrent discovery of other addresses/services runs independently in parallel —
+    // nothing here serializes across different keys.
+    //
+    // An entry is only kept once its request resolves non-empty: WinRT returns an empty
+    // list for a service that is still busy from a concurrent discovery attempt, and once
+    // a non-empty (successful) result is stored it is served forever (until disconnect) —
+    // no later round-trip ever runs to overwrite it. An empty result is therefore evicted
+    // immediately so the next call retries instead of a bad response getting "stuck".
+    _getServicesRaw(address) {
+        if (this._servicesRequests.has(address))
+            return this._servicesRequests.get(address);
+
+        const promise = this._sendRequest({ cmd: 'services', device: this._deviceMap[address] });
+        this._servicesRequests.set(address, promise);
+        promise.then(result => {
+            if (!result || result.length === 0)
+                this._servicesRequests.delete(address);
+        }, () => { this._servicesRequests.delete(address); });
+        return promise;
+    }
+
+    // Same request-store/coalescing approach as _getServicesRaw, keyed per address+service,
+    // with the same empty-result eviction so a busy service can be retried later
+    // instead of poisoning the store with an empty characteristics list.
+    _getCharacteristicsRaw(address, service) {
+        const key = `${address}::${service}`;
+        if (this._characteristicsRequests.has(key))
+            return this._characteristicsRequests.get(key);
+
+        const promise = this._sendRequest({
+            cmd: 'characteristics',
+            device: this._deviceMap[address],
+            service: toWindowsUuid(service),
+        });
+        this._characteristicsRequests.set(key, promise);
+        promise.then(result => {
+            if (!result || result.length === 0)
+                this._characteristicsRequests.delete(key);
+        }, () => { this._characteristicsRequests.delete(key); });
+        return promise;
+    }
+
     connect(address) {
         this.logEvent({message: 'BLEServer connect', address});
         
@@ -375,6 +443,7 @@ class WinrtBindings extends events.EventEmitter {
     disconnect(address, fromEvent=false) {
         
         this.logger.logEvent({message: 'BLEServer disconnect', address});       // always log - also when logging is disabled
+        this._clearRequestsForAddress(address);
         return this._sendRequest({ cmd: 'disconnect', device: this._deviceMap[address] })
             .then(result => {
                 this._deviceMap[address] = null;
@@ -388,7 +457,7 @@ class WinrtBindings extends events.EventEmitter {
 
     discoverServices(address, filters = []) {
         this.logEvent({message: 'BLEServer discoverServices', address, filters});
-        this._sendRequest({ cmd: 'services', device: this._deviceMap[address] })
+        this._getServicesRaw(address)
             .then(result => {
                 try {
                     const sids = result.map(fromWindowsUuid).map( s => ({uuid:s, uuid_short:uuid(s)}))
@@ -411,11 +480,7 @@ class WinrtBindings extends events.EventEmitter {
     discoverCharacteristics(address, service, filters = []) {
         this.logEvent({message: 'BLEServer discoverCharacteristics', address,service,filters});
 
-        this._sendRequest({
-            cmd: 'characteristics',
-            device: this._deviceMap[address],
-            service: toWindowsUuid(service),
-        })
+        this._getCharacteristicsRaw(address, service)
             .then(result => {
                 
                 this.logEvent({message: 'BLEServer characteristics:', info: result.map( c => `${address} ${fromWindowsUuid(c.uuid)}  ${Object.keys(c.properties).filter(p => c.properties[p])}`)});
@@ -672,6 +737,7 @@ class WinrtBindings extends events.EventEmitter {
             if (disconnectRequest) {
                 if (this._deviceMap[address] == message.device) {
                     this._deviceMap[address] = null;
+                    this._clearRequestsForAddress(address);
                     processed = true;
                 }
                 if (this.bleServerDebug)
@@ -679,6 +745,7 @@ class WinrtBindings extends events.EventEmitter {
             }
             else if (this._deviceMap[address] == message.device) {
                 this._deviceMap[address] = null;
+                this._clearRequestsForAddress(address);
 
                 if (!processed)
                     this.logEvent({ message: 'BLEserver in:', type: 'disconnect', device: message.device });

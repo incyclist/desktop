@@ -5,9 +5,11 @@ function isSquirrelBusy() {
     return require('electron-squirrel-startup')
 }
 
-if(isSquirrelBusy()) 
+if(isSquirrelBusy())
     process.exit();
 else {
+    Incyclist.configureCommandLine(); // must run synchronously, before any await, to apply before Chromium's native init
+
     Incyclist.init().then( ()=>{
         const app = new Incyclist()   
 

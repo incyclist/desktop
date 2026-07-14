@@ -48,7 +48,10 @@ class IncyclistApp
             Menu.setApplicationMenu(null);
         }
         if (process.platform==='linux' && !process.env.DEBUG && !process.env.LOADER_DEBUG && this.environment==='prod')  {
-            app.commandLine.appendSwitch('no-sandbox');            
+            app.commandLine.appendSwitch('no-sandbox');
+        }
+        if (process.platform === 'linux') {
+            app.commandLine.appendSwitch('enable-experimental-web-platform-features')
         }
 
 

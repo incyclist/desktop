@@ -89,6 +89,14 @@ class MainWindow {
         this.win.webContents.session.webRequest.onErrorOccurred( (details)=> {
             this.requestLogger.log("Error loading: "+ details.url+":"+details.error);
         })
+        this.win.webContents.session.webRequest.onBeforeSendHeaders(
+            { urls: ['https://*.tile.openstreetmap.org/*'] },
+            (details, callback) => {
+                details.requestHeaders['Referer'] = 'https://incyclist.com';
+                details.requestHeaders['User-Agent'] = `Incyclist/${this.app.appVersion} (https://github.com/incyclist)`;
+                callback({ requestHeaders: details.requestHeaders });
+            }
+        );
         if ( this.oldWin)
             this.oldWin.win.hide();
 

@@ -114,7 +114,7 @@ class NetworkFeature extends Feature{
         }
 
         spec.registerFeatures( [
-            'network.scan', 'network.socket'
+            'network.scan', 'network.socket', 'network.openmap-referrer'
         ] )
         
         ipcRegisterBroadcast(spec.network,'network-socket-event',ipcRenderer)

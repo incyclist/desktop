@@ -31,8 +31,30 @@ class IncyclistApp
      * This workaround can be removed, when the app is converted to TypeScript
      * @returns {Promise<void>}
      */
+    /**
+     * Sets Electron command-line switches that must be applied before Chromium's
+     * native browser-process initialization begins (e.g. sandbox setup on Linux).
+     *
+     * Must be called synchronously, before any `await`, as early as possible in
+     * main.js. Calling it after an async gap (e.g. from within the constructor,
+     * which used to run only after the async init() dynamic import resolved) is
+     * too late: Chromium can already be spawning its zygote process on Linux by
+     * then, causing a FATAL setuid-sandbox abort when the AppImage's bundled
+     * chrome-sandbox helper isn't root-owned/4755.
+     */
+    static configureCommandLine() {
+        const environment = process.env.ENVIRONMENT ?? "prod";
+
+        if (process.platform==='linux' && !process.env.DEBUG && !process.env.LOADER_DEBUG && environment==='prod')  {
+            app.commandLine.appendSwitch('no-sandbox');
+        }
+        if (process.platform === 'linux') {
+            app.commandLine.appendSwitch('enable-experimental-web-platform-features')
+        }
+    }
+
     static async init() {
-        const UnhandledLib = await import('electron-unhandled'); 
+        const UnhandledLib = await import('electron-unhandled');
         unhandled = UnhandledLib.default;
     }
 
@@ -41,17 +63,10 @@ class IncyclistApp
         // all other initialization can be done in start())
 
         this.environment  = process.env.ENVIRONMENT ?? "prod";
-        
-        app.incyclistApp = this
 
+        app.incyclistApp = this
         if (process.platform==='darwin') {
             Menu.setApplicationMenu(null);
-        }
-        if (process.platform==='linux' && !process.env.DEBUG && !process.env.LOADER_DEBUG && this.environment==='prod')  {
-            app.commandLine.appendSwitch('no-sandbox');
-        }
-        if (process.platform === 'linux') {
-            app.commandLine.appendSwitch('enable-experimental-web-platform-features')
         }
 
 

@@ -1,5 +1,5 @@
 const {ipcMain} = require('electron');
-const {TCPBinding} = require('incyclist-devices')
+const {TCPBinding} = require('./tcp-binding')
 const { autoDetect } = require('@serialport/bindings-cpp')
 const {IpcBinding,SerialIpcBinding,TCPIpcBinding} = require('./ipc-binding')
 const Feature = require("../base");

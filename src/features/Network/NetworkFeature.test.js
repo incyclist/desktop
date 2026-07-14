@@ -81,7 +81,7 @@ describe ('NetworkFeature',()=> {
 
             expect(res).toBeUndefined();  // does not return anything
             expect(utils.ipcCall).toHaveBeenCalledWith('network-scan',expect.anything())    // has registered ipc-call 'network-scan'
-            expect(api.registerFeatures).toHaveBeenCalledWith(['network.scan','network.socket']) ;           // has added 'network.scan' to  features array
+            expect(api.registerFeatures).toHaveBeenCalledWith(['network.scan','network.socket','network.openmap-referrer']) ;           // has added 'network.scan' to  features array
 
         })
         test('spec does not have registerFeatures function -> will throw an error',()=>{

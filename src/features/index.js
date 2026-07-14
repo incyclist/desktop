@@ -10,6 +10,7 @@ const DownloadManager = require('./download').getInstance();
 const Network = require('./Network').getInstance()
 const MessageQueue = require('./mq').getInstance();
 const Ble = require('./ble').getInstance()
+const WebBle = require('./webble/feature').getInstance()
 const Ant = require('./ant').getInstance();
 const Fs = require('./fs').getInstance();
 const OAuth = require('./oauth').getInstance()
@@ -32,6 +33,7 @@ function initFeaturesApp( props ) {
     Network.register(props);
     MessageQueue.register(props);
     Ble.register(props);
+    WebBle.register(props);
     Ant.register(props);
     SerialFeature.register(props);
     Fs.register(props);
@@ -70,6 +72,7 @@ function initFeaturesWeb( electron,ipcRenderer) {
     Network.registerRenderer(electron,ipcRenderer);
     MessageQueue.registerRenderer(electron,ipcRenderer);
     Ble.registerRenderer(electron,ipcRenderer);
+    WebBle.registerRenderer(electron,ipcRenderer);
     Ant.registerRenderer(electron,ipcRenderer);
     SerialFeature.registerRenderer(electron,ipcRenderer);
     Fs.registerRenderer(electron,ipcRenderer);

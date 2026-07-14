@@ -32,7 +32,7 @@ const clone = (obj) => {
 
         return JSON.parse(JSON.stringify(obj));
     }
-    catch (err) { 
+    catch (err) {
         console.log('error cloning',err, obj)
         return null;
     }
@@ -211,23 +211,23 @@ class BLEFeature extends Feature {
         }
     }
 
-    async getServicesAndCharacteristicsRequest(event, callId, id,services,characteristics) { 
+    async getServicesAndCharacteristicsRequest(event, callId, id,services,characteristics) {
         const peripheral = this.peripherals.find( p => p.id===id);
         let error = null;
-        let res
-        if ( peripheral ) { 
+        let res = {}
+        if ( peripheral ) {
             try {
-                res = await peripheral.discoverSomeServicesAndCharacteristicsAsync(services,characteristics);                
+                res = await peripheral.discoverSomeServicesAndCharacteristicsAsync(services,characteristics);
                 peripheral.services = res.services;
                 peripheral.characteristics = res.characteristics;
             }
-            catch (err) { 
+            catch (err) {
                 error = err;
             }
-            ipcResponse(event.sender,'ble-getServicesChars', callId, {   
+            ipcResponse(event.sender,'ble-getServicesChars', callId, {
                 error,
-                services:res.services? res.services.map(clone):null, 
-                characteristics:characteristics? res.characteristics.map(clone): null
+                services:res.services? res.services.map(clone):null,
+                characteristics:res.characteristics? res.characteristics.map(clone): null
             });
         }
     }
@@ -237,26 +237,26 @@ class BLEFeature extends Feature {
         let error = null;
         let services
 
-        if ( peripheral ) { 
+        if ( peripheral ) {
             try {
-                services = await peripheral.discoverServicesAsync(requestedServices);                
+                services = await peripheral.discoverServicesAsync(requestedServices);
                 peripheral.services = services;
-                
+
             }
-            catch (err) { 
+            catch (err) {
                 error = err;
             }
-            ipcResponse(event.sender,'ble-getServices', callId, {   
+            ipcResponse(event.sender,'ble-getServices', callId, {
                 error,
-                services:services? services.map(clone):null,                 
+                services:services? services.map(clone):null,
             });
         }
     }
 
-    async subscribeRequest(event, callId, peripheralId,  characteristicUUID) { 
+    async subscribeRequest(event, callId, peripheralId,  characteristicUUID) {
         const peripheral = this.peripherals.find( p => p.id===peripheralId);
-        const characteristic = peripheral.characteristics.find( c => c.uuid===characteristicUUID);
-        
+        const characteristic = peripheral?.characteristics?.find( c => c.uuid===characteristicUUID);
+
         let error = null;        
         if ( peripheral && characteristic) { 
             try {
@@ -316,10 +316,10 @@ class BLEFeature extends Feature {
         
     }
 
-    async unsubscribeRequest(event, callId, peripheralId,  characteristicUUID) { 
+    async unsubscribeRequest(event, callId, peripheralId,  characteristicUUID) {
         const peripheral = this.peripherals.find( p => p.id===peripheralId);
-        const characteristic = peripheral.characteristics.find( c => c.uuid===characteristicUUID);
-        
+        const characteristic = peripheral?.characteristics?.find( c => c.uuid===characteristicUUID);
+
         let error = null;        
         if ( peripheral && characteristic) { 
             try {
@@ -340,10 +340,10 @@ class BLEFeature extends Feature {
 
     }
 
-    async readRequest(event, callId, peripheralId,  characteristicUUID) { 
+    async readRequest(event, callId, peripheralId,  characteristicUUID) {
         const peripheral = this.peripherals.find( p => p.id===peripheralId);
-        const characteristic = peripheral.characteristics.find( c => c.uuid===characteristicUUID);
-        
+        const characteristic = peripheral?.characteristics?.find( c => c.uuid===characteristicUUID);
+
         let error = null;        
 
         if ( peripheral && characteristic) { 
@@ -361,10 +361,10 @@ class BLEFeature extends Feature {
     }
 
 
-    async write( peripheralId,  characteristicUUID, data, withoutResponse) { 
+    async write( peripheralId,  characteristicUUID, data, withoutResponse) {
         const peripheral = this.peripherals.find( p => p.id===peripheralId);
-        const characteristic = peripheral.characteristics.find( c => c.uuid===characteristicUUID);
-        
+        const characteristic = peripheral?.characteristics?.find( c => c.uuid===characteristicUUID);
+
         if ( peripheral && characteristic) { 
 
             let b = data;
@@ -407,11 +407,11 @@ class BLEFeature extends Feature {
             }
         }
         else if ( peripheral && !characteristic ) {
-            error = new Error('characteristic not found');
+            throw new Error('characteristic not found');
         }
-        else { 
+        else {
             throw new Error('device not found');
-        }        
+        }
     }
 
     setServerDebug(enabled) {

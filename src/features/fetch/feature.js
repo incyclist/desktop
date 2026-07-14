@@ -3,6 +3,14 @@ const { EventLogger } = require('gd-eventlog');
 const Feature = require('../base');
 const { ipcCall, ipcHandle } = require('../utils');
 
+function toPlainHeaders(headers = {}) {
+    const result = {}
+    Object.entries(headers).forEach(([key, value]) => {
+        result[key] = Array.isArray(value) ? value.join(', ') : value
+    })
+    return result
+}
+
 // singleton pattern
 class FetchFeature extends Feature {
     static _instance;
@@ -34,43 +42,33 @@ class FetchFeature extends Feature {
                 return
             }
 
-            Object.entries(headers).forEach(([key, value]) => {
-                request.setHeader(key, value)
-            })
+            Object.entries(headers).forEach(([key, value]) => request.setHeader(key, value))
 
-            request.on('response', (response) => {
-                const chunks = []
-                response.on('data', (chunk) => chunks.push(chunk))
-                response.on('end', () => {
-                    const data = Buffer.concat(chunks).toString('utf-8')
-                    const responseHeaders = {}
-                    Object.entries(response.headers ?? {}).forEach(([key, value]) => {
-                        responseHeaders[key] = Array.isArray(value) ? value.join(', ') : value
-                    })
-
-                    resolve({
-                        ok: response.statusCode >= 200 && response.statusCode < 300,
-                        status: response.statusCode,
-                        statusText: response.statusMessage,
-                        headers: responseHeaders,
-                        data
-                    })
-                })
-                response.on('error', (err) => {
-                    this.logger.logEvent({ message: 'error', fn: 'fetch', url, error: err.message })
-                    reject(err)
-                })
-            })
-
-            request.on('error', (err) => {
-                this.logger.logEvent({ message: 'error', fn: 'fetch', url, error: err.message })
-                reject(err)
-            })
+            request.on('response', (response) => this._handleResponse(url, response, resolve, reject))
+            request.on('error', (err) => this._handleError(url, err, reject))
 
             if (body !== undefined)
                 request.write(body)
             request.end()
         })
+    }
+
+    _handleResponse(url, response, resolve, reject) {
+        const chunks = []
+        response.on('data', (chunk) => chunks.push(chunk))
+        response.on('end', () => resolve({
+            ok: response.statusCode >= 200 && response.statusCode < 300,
+            status: response.statusCode,
+            statusText: response.statusMessage,
+            headers: toPlainHeaders(response.headers),
+            data: Buffer.concat(chunks).toString('utf-8')
+        }))
+        response.on('error', (err) => this._handleError(url, err, reject))
+    }
+
+    _handleError(url, err, reject) {
+        this.logger.logEvent({ message: 'error', fn: 'fetch', url, error: err.message })
+        reject(err)
     }
 
     register(_props) {

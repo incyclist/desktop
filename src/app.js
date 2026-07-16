@@ -43,12 +43,9 @@ class IncyclistApp
      * chrome-sandbox helper isn't root-owned/4755.
      */
     static configureCommandLine() {
-        const environment = process.env.ENVIRONMENT ?? "prod";
 
-        if (process.platform==='linux' && !process.env.DEBUG && !process.env.LOADER_DEBUG && environment==='prod')  {
-            app.commandLine.appendSwitch('no-sandbox');
-        }
         if (process.platform === 'linux') {
+            app.commandLine.appendSwitch('no-sandbox');
             app.commandLine.appendSwitch('enable-experimental-web-platform-features')
 
             // Electron>39 (Chromium's VAAPI video decoder) crashes the GPU process on many

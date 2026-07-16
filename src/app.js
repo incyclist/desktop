@@ -50,6 +50,13 @@ class IncyclistApp
         }
         if (process.platform === 'linux') {
             app.commandLine.appendSwitch('enable-experimental-web-platform-features')
+
+            // Electron>39 (Chromium's VAAPI video decoder) crashes the GPU process on many
+            // Linux driver setups ("Context was lost" / GPU process exited unexpectedly),
+            // which tears down in-flight <video> playback with
+            // PIPELINE_ERROR_DISCONNECTED / MEDIA_ERR_DECODE. Falling back to software video
+            // decode avoids the crash while leaving GPU-accelerated compositing/rendering on.
+            app.commandLine.appendSwitch('disable-features', 'AcceleratedVideoDecodeLinuxGL,VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks')
         }
     }
 

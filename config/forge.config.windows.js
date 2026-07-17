@@ -30,7 +30,7 @@ module.exports = {
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        authors: ["Guido Doumen", "Jeroen Doumen"],
+        authors: "Guido Doumen, Jeroen Doumen",
         setupIcon:'res/icons/incyclist.ico',
         ...(signWindows ? {
           windowsSign: {

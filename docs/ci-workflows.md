@@ -136,13 +136,37 @@ expiration is the ability to produce *new* signed builds. Rotate before then
 by generating fresh certs in the Apple Developer portal and repeating the
 export steps above; no urgency otherwise.
 
-**Runner uses `macos-latest`** (not pinned, unlike Windows). This carries the
-same kind of image-drift risk that bit the Windows build — Xcode/toolchain
-version bumps happening silently underneath you. Not pinned as of this
-writing since it hasn't caused a problem yet; if a Mac build starts failing
-for no code-related reason, check whether `macos-latest` moved to a new Xcode
-version first, and consider pinning to a specific `macos-14`/`macos-15` label
-the same way Windows is pinned to `windows-2022`.
+**Runner is pinned to `macos-26`**, not `macos-latest` — same rationale as the
+Windows `windows-2022` pin. `macos-latest` migrated to `macos-26` (arm64) on
+2026-07-15, which silently broke the build (see "Both architectures" below)
+the same week this was written. If a Mac build starts failing for no
+code-related reason later, check whether a newer `macos-*` label needs
+adopting explicitly, rather than drifting onto it via `-latest`.
+
+### Both architectures from one runner
+
+`npm run make` alone only builds for the runner's host architecture. Since
+`macos-26` is Apple Silicon (arm64), the build step explicitly runs it twice:
+
+```bash
+npm run make -- --arch=arm64
+npm run make -- --arch=x64
+```
+
+No separate Intel runner is needed — Xcode's toolchain supports cross-arch
+compilation directly (`clang -arch x86_64 -arch arm64`), unlike Windows/Linux
+where cross-compiling native Node addons for a different CPU architecture is
+generally unreliable. This mirrors the pre-existing local dev convention in
+`package.json`'s `make-mac-dist`/`make-mac-dist-arm` scripts.
+
+A "Flatten output" step runs after both builds: `maker-dmg`/`maker-pkg` write
+flat to `out/make/`, but `maker-zip` nests three levels deep at
+`out/make/zip/<platform>/<arch>/`. Without flattening, the uploaded artifact
+ends up with dmg/pkg at the top level and the zip buried in a `zip/darwin/…`
+folder — which is what showed up initially as "the zip is a folder, not a
+file." Filenames already include the arch (`Incyclist-<version>-<arch>.dmg`
+etc.), so both architectures' outputs coexist in `out/make/` without
+colliding, and ship in a single `incyclist-mac` artifact.
 
 ---
 

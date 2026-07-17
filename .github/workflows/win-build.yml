@@ -5,22 +5,27 @@ name: Windows x64 Build
 
 on:
   release:
-    types: [created] 
+    types: [created]
   workflow_dispatch:
+    inputs:
+      sign_windows:
+        description: 'Sign the Windows installer (requires a valid, non-expired code-signing certificate in the CERT_WINDOWS secret)'
+        type: boolean
+        default: false
 
 jobs:
   build:
 
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     strategy:
       matrix:
-        node-version: [20]
+        node-version: [24]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Retrieve the settings and write them to a file
       shell: pwsh    
@@ -31,7 +36,8 @@ jobs:
         dir .\config
 
     - name: Generate certificate file from secret
-      shell: pwsh    
+      if: ${{ inputs.sign_windows == true }}
+      shell: pwsh
       env:
         SETTINGS_FILE: ${{ secrets.CERT_WINDOWS }}
       run: |
@@ -41,22 +47,24 @@ jobs:
         dir .\certs
 
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
-      
+
     - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v2
+      uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
 
     - name: Build Installer
       env:
         RELEASE_SERVER: ${{ secrets.RELEASE_SERVER }}
-      run: |        
-        "dist" >> $env:BUILD_TARGET
-        npm install       
+        SIGN_WINDOWS: ${{ inputs.sign_windows }}
+        CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+      run: |
+        $env:BUILD_TARGET = "dist"
+        npm install
         npm run make
   
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: package
         path: ./out/make/squirrel.windows/x64/

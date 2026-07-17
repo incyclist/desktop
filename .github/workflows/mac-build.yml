@@ -5,26 +5,32 @@ name: Mac Build
 
 on:
   release:
-    types: [created] 
+    types: [created]
   workflow_dispatch:
+    inputs:
+      sign_mac:
+        description: 'Sign and notarize the build for distribution (requires CERT_MAC, CERTIFICATE_PASSWORD_MAC, CERT_MAC_INSTALLER, CERTIFICATE_PASSWORD_MAC_INSTALLER, PROVISION_PROFILE_MAC, APPLE_DEVELOPER, APPLE_TEAM_ID, APPLE_ID and APPLE_PASSWORD secrets)'
+        type: boolean
+        default: false
 
 jobs:
   build:
 
-    runs-on: macos-latest
+    runs-on: macos-26
 
     strategy:
       matrix:
-        node-version: [20]
+        node-version: [24]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+        # Pinned to a specific image rather than macos-latest - see docs/ci-workflows.md.
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
-        python-version: '3.10' 
-        
+        python-version: '3.10'
+
     - name: Retrieve the settings and write them to a file
       env:
         SETTINGS_FILE: ${{ secrets.SETTINGS_FILE }}
@@ -32,19 +38,59 @@ jobs:
         echo $SETTINGS_FILE > ./config/settings.json
         cat ./config/settings.json
 
+    - name: Import signing certificates and provisioning profile
+      if: ${{ inputs.sign_mac == true }}
+      env:
+        CERT_MAC: ${{ secrets.CERT_MAC }}
+        CERTIFICATE_PASSWORD_MAC: ${{ secrets.CERTIFICATE_PASSWORD_MAC }}
+        CERT_MAC_INSTALLER: ${{ secrets.CERT_MAC_INSTALLER }}
+        CERTIFICATE_PASSWORD_MAC_INSTALLER: ${{ secrets.CERTIFICATE_PASSWORD_MAC_INSTALLER }}
+        PROVISION_PROFILE_MAC: ${{ secrets.PROVISION_PROFILE_MAC }}
+      run: |
+        KEYCHAIN_PASSWORD=$(uuidgen)
+        CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+        INSTALLER_CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate_installer.p12
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+        echo -n "$CERT_MAC" | base64 --decode --output $CERTIFICATE_PATH
+        echo -n "$CERT_MAC_INSTALLER" | base64 --decode --output $INSTALLER_CERTIFICATE_PATH
+        mkdir -p profiles
+        echo -n "$PROVISION_PROFILE_MAC" | base64 --decode --output profiles/Distribution.provisionprofile
+
+        security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security import $CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD_MAC" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH -T /usr/bin/codesign
+        security import $INSTALLER_CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD_MAC_INSTALLER" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH -T /usr/bin/productsign -T /usr/bin/productbuild
+        security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign:,productbuild: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security list-keychains -d user -s $KEYCHAIN_PATH
+
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
-    - run: |
-       npm install       
-       npm i --save-dev appdmg
-       npm run package-mac
-       npm run installer-mac
-       ls ./installer/mac
-    
-    - uses: actions/upload-artifact@v4
-      with:
-        name: incyclist.dmg
-        path: ./installer/mac
 
+    - name: Build
+      env:
+        SIGN_MAC: ${{ inputs.sign_mac }}
+        APPLE_DEVELOPER: ${{ secrets.APPLE_DEVELOPER }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      run: |
+        npm install
+        if [ "$SIGN_MAC" = "true" ]; then export BUILD_TARGET=incyclist; fi
+        npm run make -- --arch=arm64
+        npm run make -- --arch=x64
+
+    - name: Flatten output for a predictable artifact layout
+      run: |
+        find out/make -mindepth 2 -iname "*.zip" -exec mv {} out/make/ \;
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: incyclist-mac
+        path: |
+          out/make/*.dmg
+          out/make/*.pkg
+          out/make/*.zip

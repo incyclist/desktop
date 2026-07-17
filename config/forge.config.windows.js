@@ -1,6 +1,10 @@
 const updateWebBundle = require('../scripts/update-web-bundle')
 const fs = require('fs/promises')
 
+// Signing is opt-in: set SIGN_WINDOWS=true (see .github/workflows/win-build.yml)
+// once a valid, non-expired code-signing certificate is available.
+const signWindows = process.env.SIGN_WINDOWS === 'true'
+
 module.exports = {
   hooks: {
     prePackage: async (options) => { 
@@ -27,7 +31,13 @@ module.exports = {
       name: '@electron-forge/maker-squirrel',
       config: {
         authors: ["Guido Doumen", "Jeroen Doumen"],
-        setupIcon:'res/icons/incyclist.ico'
+        setupIcon:'res/icons/incyclist.ico',
+        ...(signWindows ? {
+          windowsSign: {
+            certificateFile: './certs/installer.pfx',
+            certificatePassword: process.env.CERTIFICATE_PASSWORD,
+          }
+        } : {})
       }
     }
   ]

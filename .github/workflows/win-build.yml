@@ -5,8 +5,13 @@ name: Windows x64 Build
 
 on:
   release:
-    types: [created] 
+    types: [created]
   workflow_dispatch:
+    inputs:
+      sign_windows:
+        description: 'Sign the Windows installer (requires a valid, non-expired code-signing certificate in the CERT_WINDOWS secret)'
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -31,7 +36,8 @@ jobs:
         dir .\config
 
     - name: Generate certificate file from secret
-      shell: pwsh    
+      if: ${{ inputs.sign_windows == true }}
+      shell: pwsh
       env:
         SETTINGS_FILE: ${{ secrets.CERT_WINDOWS }}
       run: |
@@ -51,9 +57,10 @@ jobs:
     - name: Build Installer
       env:
         RELEASE_SERVER: ${{ secrets.RELEASE_SERVER }}
-      run: |        
-        "dist" >> $env:BUILD_TARGET
-        npm install       
+        SIGN_WINDOWS: ${{ inputs.sign_windows }}
+      run: |
+        $env:BUILD_TARGET = "dist"
+        npm install
         npm run make
   
     - uses: actions/upload-artifact@v7

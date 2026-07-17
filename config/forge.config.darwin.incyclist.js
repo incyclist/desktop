@@ -55,7 +55,8 @@ module.exports = {
       config: {
         appId: 'com.incyclist.desktop',
         install: '/Applications',
-        icon: 'res/icons/incyclist.icns'
+        icon: 'res/icons/incyclist.icns',
+        identity: `Developer ID Installer: ${process.env.APPLE_DEVELOPER} (${process.env.APPLE_TEAM_ID})`,
       },
       platforms: ['darwin'],
     }

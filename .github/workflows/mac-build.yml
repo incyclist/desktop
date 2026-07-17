@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       sign_mac:
-        description: 'Sign and notarize the build for distribution (requires CERT_MAC, CERTIFICATE_PASSWORD_MAC, PROVISION_PROFILE_MAC, APPLE_DEVELOPER, APPLE_TEAM_ID, APPLE_ID and APPLE_PASSWORD secrets)'
+        description: 'Sign and notarize the build for distribution (requires CERT_MAC, CERTIFICATE_PASSWORD_MAC, CERT_MAC_INSTALLER, CERTIFICATE_PASSWORD_MAC_INSTALLER, PROVISION_PROFILE_MAC, APPLE_DEVELOPER, APPLE_TEAM_ID, APPLE_ID and APPLE_PASSWORD secrets)'
         type: boolean
         default: false
 
@@ -37,18 +37,22 @@ jobs:
         echo $SETTINGS_FILE > ./config/settings.json
         cat ./config/settings.json
 
-    - name: Import signing certificate and provisioning profile
+    - name: Import signing certificates and provisioning profile
       if: ${{ inputs.sign_mac == true }}
       env:
         CERT_MAC: ${{ secrets.CERT_MAC }}
         CERTIFICATE_PASSWORD_MAC: ${{ secrets.CERTIFICATE_PASSWORD_MAC }}
+        CERT_MAC_INSTALLER: ${{ secrets.CERT_MAC_INSTALLER }}
+        CERTIFICATE_PASSWORD_MAC_INSTALLER: ${{ secrets.CERTIFICATE_PASSWORD_MAC_INSTALLER }}
         PROVISION_PROFILE_MAC: ${{ secrets.PROVISION_PROFILE_MAC }}
       run: |
         KEYCHAIN_PASSWORD=$(uuidgen)
         CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+        INSTALLER_CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate_installer.p12
         KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
         echo -n "$CERT_MAC" | base64 --decode --output $CERTIFICATE_PATH
+        echo -n "$CERT_MAC_INSTALLER" | base64 --decode --output $INSTALLER_CERTIFICATE_PATH
         mkdir -p profiles
         echo -n "$PROVISION_PROFILE_MAC" | base64 --decode --output profiles/Distribution.provisionprofile
 
@@ -56,7 +60,8 @@ jobs:
         security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
         security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
         security import $CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD_MAC" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH -T /usr/bin/codesign
-        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security import $INSTALLER_CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD_MAC_INSTALLER" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH -T /usr/bin/productsign -T /usr/bin/productbuild
+        security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign:,productbuild: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
         security list-keychains -d user -s $KEYCHAIN_PATH
 
     - name: Use Node.js ${{ matrix.node-version }}

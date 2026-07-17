@@ -15,15 +15,15 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20]
+        node-version: [24]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
-        python-version: '3.10' 
+        python-version: '3.10'
         
     - name: Retrieve the settings and write them to a file
       env:
@@ -33,17 +33,17 @@ jobs:
         cat ./config/settings.json
 
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
     - run: |
-       npm install       
+       npm install
        npm i --save-dev appdmg
        npm run package-mac
        npm run installer-mac
        ls ./installer/mac
-    
-    - uses: actions/upload-artifact@v4
+
+    - uses: actions/upload-artifact@v7
       with:
         name: incyclist.dmg
         path: ./installer/mac

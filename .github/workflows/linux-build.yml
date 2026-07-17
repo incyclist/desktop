@@ -18,7 +18,7 @@ jobs:
         node-version: [24]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Install snapcraft
       run: sudo snap install snapcraft --classic        
@@ -38,16 +38,16 @@ jobs:
 
 
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
     - run: |
-       npm install       
+       npm install
        npm run make-linux
        npm run make-linux-arm
-       
-    
-    - uses: actions/upload-artifact@v4
+
+
+    - uses: actions/upload-artifact@v7
       with:
         name: AppImage
         path: |

@@ -38,13 +38,10 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - run: |
        npm install
-       npm i --save-dev appdmg
-       npm run package-mac
-       npm run installer-mac
-       ls ./installer/mac
+       npm run make
 
     - uses: actions/upload-artifact@v7
       with:
         name: incyclist.dmg
-        path: ./installer/mac
+        path: out/make/**/*.dmg
 

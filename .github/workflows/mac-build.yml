@@ -16,12 +16,13 @@ on:
 jobs:
   build:
 
-    runs-on: macos-latest
+    runs-on: macos-26
 
     strategy:
       matrix:
         node-version: [24]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+        # Pinned to a specific image rather than macos-latest - see docs/ci-workflows.md.
 
     steps:
     - uses: actions/checkout@v7
@@ -79,12 +80,17 @@ jobs:
       run: |
         npm install
         if [ "$SIGN_MAC" = "true" ]; then export BUILD_TARGET=incyclist; fi
-        npm run make
+        npm run make -- --arch=arm64
+        npm run make -- --arch=x64
+
+    - name: Flatten output for a predictable artifact layout
+      run: |
+        find out/make -mindepth 2 -iname "*.zip" -exec mv {} out/make/ \;
 
     - uses: actions/upload-artifact@v7
       with:
-        name: incyclist.dmg
+        name: incyclist-mac
         path: |
-          out/make/**/*.dmg
-          out/make/**/*.zip
-          out/make/**/*.pkg
+          out/make/*.dmg
+          out/make/*.pkg
+          out/make/*.zip

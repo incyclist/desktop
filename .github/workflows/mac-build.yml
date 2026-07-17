@@ -5,8 +5,13 @@ name: Mac Build
 
 on:
   release:
-    types: [created] 
+    types: [created]
   workflow_dispatch:
+    inputs:
+      sign_mac:
+        description: 'Sign and notarize the build for distribution (requires CERT_MAC, CERTIFICATE_PASSWORD_MAC, PROVISION_PROFILE_MAC, APPLE_DEVELOPER, APPLE_TEAM_ID, APPLE_ID and APPLE_PASSWORD secrets)'
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -24,7 +29,7 @@ jobs:
     - uses: actions/setup-python@v6
       with:
         python-version: '3.10'
-        
+
     - name: Retrieve the settings and write them to a file
       env:
         SETTINGS_FILE: ${{ secrets.SETTINGS_FILE }}
@@ -32,16 +37,49 @@ jobs:
         echo $SETTINGS_FILE > ./config/settings.json
         cat ./config/settings.json
 
+    - name: Import signing certificate and provisioning profile
+      if: ${{ inputs.sign_mac == true }}
+      env:
+        CERT_MAC: ${{ secrets.CERT_MAC }}
+        CERTIFICATE_PASSWORD_MAC: ${{ secrets.CERTIFICATE_PASSWORD_MAC }}
+        PROVISION_PROFILE_MAC: ${{ secrets.PROVISION_PROFILE_MAC }}
+      run: |
+        KEYCHAIN_PASSWORD=$(uuidgen)
+        CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+        echo -n "$CERT_MAC" | base64 --decode --output $CERTIFICATE_PATH
+        mkdir -p profiles
+        echo -n "$PROVISION_PROFILE_MAC" | base64 --decode --output profiles/Distribution.provisionprofile
+
+        security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security import $CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD_MAC" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security list-keychains -d user -s $KEYCHAIN_PATH
+
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
-    - run: |
-       npm install
-       npm run make
+
+    - name: Build
+      env:
+        SIGN_MAC: ${{ inputs.sign_mac }}
+        APPLE_DEVELOPER: ${{ secrets.APPLE_DEVELOPER }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      run: |
+        npm install
+        if [ "$SIGN_MAC" = "true" ]; then export BUILD_TARGET=incyclist; fi
+        npm run make
 
     - uses: actions/upload-artifact@v7
       with:
         name: incyclist.dmg
-        path: out/make/**/*.dmg
-
+        path: |
+          out/make/**/*.dmg
+          out/make/**/*.zip
+          out/make/**/*.pkg

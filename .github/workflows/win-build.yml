@@ -58,6 +58,7 @@ jobs:
       env:
         RELEASE_SERVER: ${{ secrets.RELEASE_SERVER }}
         SIGN_WINDOWS: ${{ inputs.sign_windows }}
+        CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
       run: |
         $env:BUILD_TARGET = "dist"
         npm install

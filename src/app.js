@@ -33,19 +33,21 @@ class IncyclistApp
      */
     /**
      * Sets Electron command-line switches that must be applied before Chromium's
-     * native browser-process initialization begins (e.g. sandbox setup on Linux).
+     * native browser-process initialization begins.
      *
-     * Must be called synchronously, before any `await`, as early as possible in
-     * main.js. Calling it after an async gap (e.g. from within the constructor,
-     * which used to run only after the async init() dynamic import resolved) is
-     * too late: Chromium can already be spawning its zygote process on Linux by
-     * then, causing a FATAL setuid-sandbox abort when the AppImage's bundled
-     * chrome-sandbox helper isn't root-owned/4755.
+     * Must be called synchronously, before any `await`, as early as possible in main.js.
+     * Calling it after an async gap (e.g. from within the constructor, which used to run only
+     * after the async init() dynamic import resolved) is too late.
+     *
+     * Sandbox setup on Linux is handled elsewhere, not here: a packaged build's AppRun launcher
+     * (config/linux64-installer.json's toolsets.appimage) decides whether --no-sandbox is
+     * needed before Chromium's native startup even begins, and main.js has a dev-mode-only
+     * fallback for `electron ./` runs. Both run before this function ever gets a chance to,
+     * which is why a plain appendSwitch('no-sandbox') call here never reliably worked.
      */
     static configureCommandLine() {
 
         if (process.platform === 'linux') {
-            app.commandLine.appendSwitch('no-sandbox');
             app.commandLine.appendSwitch('enable-experimental-web-platform-features')
 
             // Electron>39 (Chromium's VAAPI video decoder) crashes the GPU process on many

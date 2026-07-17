@@ -1,5 +1,8 @@
 {
     "beforePack": "scripts/update-web-bundle.js",
+    "toolsets": {
+        "appimage": "1.0.2"
+    },
     "publish": {
         "provider": "generic",
         "url": "https://updates.incyclist.com/download/app/latest/linux/x64"
@@ -12,7 +15,7 @@
         "buildResources": "res"
     },
     "linux": {
-        "icon": "res/icon_256.png",
+        "icon": "res/icons/icon_256.png",
         "category": "Games;Sports",
         "maintainer": "Guido Doumen",
         "desktop":   {

@@ -102,6 +102,50 @@ they are not interchangeable:
 | `APPLE_ID` | Apple ID email used for notarization |
 | `APPLE_PASSWORD` | app-specific password for that Apple ID (generate at [appleid.apple.com](https://appleid.apple.com) → Sign-In and Security → App-Specific Passwords) |
 
+### The `.pkg` is built by hand, not via `@electron-forge/maker-pkg`
+
+`config/forge.config.darwin.incyclist.js` has a `postPackage` hook that builds
+the `.pkg` itself instead of using `@electron-forge/maker-pkg` (which has been
+removed from `makers`). Reason: macOS `pkgbuild`, when not given an explicit
+`--component-plist`, defaults a component to `BundleIsRelocatable=true` —
+which lets macOS Installer "relocate" the install to wherever Launch Services
+already has `com.incyclist.desktop` registered (e.g. a copy previously run
+from the DMG) instead of the configured `/Applications`, sometimes leaving
+the app installed nowhere findable at all. `maker-pkg`'s config has no way to
+pass a custom component plist, so there's no way to fix this through it.
+
+The hook runs `pkgbuild --analyze`, patches `BundleIsRelocatable` to `false`
+via `PlistBuddy`, then re-runs the same `pkgbuild`/`productbuild` sequence
+`@electron/osx-sign` uses internally (confirmed from its source) with that
+patched plist. If you ever hit "PKG says it installed successfully but the
+app isn't findable anywhere" again, this is the mechanism to suspect first —
+try `mdfind "kMDItemCFBundleIdentifier == 'com.incyclist.desktop'"` or check
+`/var/log/install.log` for "relocat" to confirm, and
+`/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user`
+to clear a stale registration as an immediate workaround.
+
+This was written and syntax-checked but not verified end-to-end against a
+signed build at the time of writing — confirm the next signed Mac build still
+produces an installable, findable `.pkg` before trusting this blindly.
+
+### DMG shows `.background`/`.VolumeIcon.icns` as visible files
+
+Not a build defect — `appdmg` (used internally by `@electron-forge/maker-dmg`)
+does correctly mark these as hidden files. What actually causes it: Finder's
+"Show Hidden Files" setting (`AppleShowAllFiles`), a very common setting on
+dev machines, overrides the invisible flag for anyone who has it on. There's
+no way to force a viewer's own Finder preference off from the build side.
+
+Fix applied (the `appdmg` maintainers' own recommended workaround, see
+[LinusU/node-appdmg#14](https://github.com/LinusU/node-appdmg/issues/14)):
+the `maker-dmg` config's `contents` explicitly positions `.background`,
+`.VolumeIcon.icns`, and `.DS_Store` below the visible window bounds
+(`window.size.height: 400`, those files placed at `y: 700`) — so even with
+hidden files shown, they're out of view unless someone scrolls for them.
+If the DMG's primary app/Applications-shortcut icons ever need
+repositioning, keep them within `y < 400`; anything at `y >= 400` is
+intentionally off-screen.
+
 ### Exporting a certificate as `.p12` (when you need to rotate)
 
 Apple's Developer portal only ever gives you the public certificate — the

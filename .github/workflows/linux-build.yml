@@ -15,6 +15,26 @@
 # causing a dlopen failure on real ARM64 hardware (e.g. Raspberry Pi) while the rest of the app
 # started fine. Running each arch in its own job guarantees make-linux-arm always starts from a
 # node_modules that has never had an x64 native build performed in it.
+#
+# `npm ci --ignore-scripts` instead of `npm install`: locks installs to package-lock.json, and
+# skips npm lifecycle scripts. Verified locally that this is safe for these two jobs specifically:
+# `@serialport/bindings-cpp`/`usb`/`@stoprocent/noble`'s own "install": "node-gyp-build" scripts
+# are a no-op once a matching prebuild already exists (which it does, for every arch, since they
+# ship via prebuildify) - skipping them does not remove any binary these jobs need. `electron`
+# itself has no install-time download script in this version; its dist zip is fetched by
+# electron-builder during packaging, independent of npm scripts. Full make-linux and
+# make-linux-arm runs were reproduced locally with --ignore-scripts and both completed,
+# producing a working AppImage.
+#
+# Caveat found during that verification (out of scope for this fix, tracked separately): even in
+# an isolated arm64-only job, @electron/rebuild still performs a REAL node-gyp compile for
+# @stoprocent/noble and its @stoprocent/bluetooth-hci-socket dependency (unlike bindings-cpp/usb,
+# neither declares a package.json "binary" field, so @electron/rebuild doesn't recognize them as
+# prebuild-only and attempts a source rebuild regardless of arch) - on this x64 runner, with no
+# arm64 cross-compiler, that silently falls back to compiling for the host arch instead of
+# failing, so the "arm64" package still gets an x86-64 noble.node/bluetooth_hci_socket.node. This
+# job split fully fixes the originally reported serialport/bindings-cpp crash, but BLE via noble
+# on ARM64 may still be affected - needs its own follow-up.
 
 name: Linux Build
 
@@ -57,7 +77,7 @@ jobs:
 
     - name: Build x64 AppImage
       run: |
-       npm install
+       npm ci --ignore-scripts
        npm run make-linux
 
     - uses: actions/upload-artifact@v4
@@ -100,7 +120,7 @@ jobs:
 
     - name: Build arm64 AppImage
       run: |
-       npm install
+       npm ci --ignore-scripts
        npm run make-linux-arm
 
     - uses: actions/upload-artifact@v4

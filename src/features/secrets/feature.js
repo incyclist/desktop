@@ -77,13 +77,19 @@ class SecretsFeature extends Feature {
 
     async performInit() {
         try {
-            if (!safeStorage.isEncryptionAvailable()) {
-                this.logger.logEvent({ message: 'safeStorage not available' });
-                this.currentStatus = 'missing';
-                return this.currentStatus;
+            const storageAvailable = safeStorage.isEncryptionAvailable();
+            if (!storageAvailable) {
+                this.logger.logEvent({
+                    message: 'safeStorage not available',
+                    selectedStorageBackend: safeStorage.getSelectedStorageBackend?.(),
+                });
             }
 
-            const cache = this._readCache();
+            // Without a working safeStorage backend we can neither read nor write the
+            // encrypted on-disk cache. Still attempt to fetch secrets over the network
+            // and keep them in memory for the lifetime of the process - re-fetching on
+            // every launch is strictly better than never fetching at all.
+            const cache = storageAvailable ? this._readCache() : null;
             const isOnline = net.isOnline();
             const expired = !cache || this._isExpired(cache.fetchedAt);
 
@@ -94,7 +100,7 @@ class SecretsFeature extends Feature {
                     this.currentStatus = 'missing';
                     return this.currentStatus;
                 }
-                return await this._runProvisioning();
+                return await this._runProvisioning(storageAvailable);
             }
 
             if (!isOnline) {
@@ -104,7 +110,7 @@ class SecretsFeature extends Feature {
                 return this.currentStatus;
             }
 
-            return await this._runStatusCheck(cache);
+            return await this._runStatusCheck(cache, storageAvailable);
         } catch (err) {
             this.logger.logEvent({ message: 'error', fn: 'performInit', error: err.message, stack: err.stack });
             this.currentStatus = 'missing';
@@ -112,7 +118,7 @@ class SecretsFeature extends Feature {
         }
     }
 
-    async _runStatusCheck(cache) {
+    async _runStatusCheck(cache, storageAvailable = true) {
         try {
             this.logger.logEvent({ message: 'check secret status' });
             const apiKey = cache.secrets?.INCYCLIST_API_KEY;
@@ -124,14 +130,15 @@ class SecretsFeature extends Feature {
             );
 
             if (response.status === 401)
-                return await this._runProvisioning();
+                return await this._runProvisioning(storageAvailable);
 
             if (response.ok) {
                 const data = response.data;
                 if (data.valid) {
                     this.currentSecrets = cache.secrets;
                 } else {
-                    this._writeCache({ secrets: data.secrets, expiresAt: data.expiresAt });
+                    if (storageAvailable)
+                        this._writeCache({ secrets: data.secrets, expiresAt: data.expiresAt });
                     this.currentSecrets = data.secrets;
                 }
                 this.currentStatus = 'ok';
@@ -154,7 +161,7 @@ class SecretsFeature extends Feature {
         return crypto.createHash('sha256').update(`${version}|${osInfo}|${uuid}`).digest('hex').slice(0, 32);
     }
 
-    async _runProvisioning() {
+    async _runProvisioning(storageAvailable = true) {
         try {
             this.logger.logEvent({ message: 'provisioning desktop secrets' });
             const version = app.getVersion();
@@ -177,7 +184,8 @@ class SecretsFeature extends Feature {
 
             if (response.ok) {
                 const data = response.data;
-                this._writeCache({ secrets: data.secrets, expiresAt: data.expiresAt });
+                if (storageAvailable)
+                    this._writeCache({ secrets: data.secrets, expiresAt: data.expiresAt });
                 this.currentSecrets = data.secrets;
                 this.currentStatus = 'ok';
                 this._pendingVerification = false;

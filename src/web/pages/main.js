@@ -199,9 +199,9 @@ class MainWindow {
     }
 
     onClose(e) {
-        e.preventDefault() 
+        e.preventDefault()
 
-        this.win.send( 'app-event',{component:'app',closing:true })
+        this.send( 'app-event',{component:'app',closing:true })
     }
 
 

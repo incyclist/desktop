@@ -189,6 +189,21 @@ describe('BLEFeature — null-check ordering when peripheral exists but characte
         expect(payload.message).toBe('characteristic not found')
     })
 
+    // FIXES_BACKLOG #30: this branch fires when the peripheral is present/connected but this one
+    // characteristic UUID is missing from its cached list - typically a stale reference left over
+    // from an earlier GATT discovery round that a later re-discovery on the same connection did not
+    // reconfirm. The log must make that reading obvious rather than reading like the device is gone.
+    test('subscribeRequest logs a diagnostic hint distinguishing a stale characteristic reference from a missing device', async () => {
+        const logSpy = jest.spyOn(feature.logger, 'logEvent')
+
+        await feature.subscribeRequest(event, 'call-1', 'p1', 'missing-char')
+
+        expect(logSpy).toHaveBeenCalledWith(expect.objectContaining({
+            error: 'characteristic not found',
+            hint: expect.stringMatching(/stale/i),
+        }))
+    })
+
     test('unsubscribeRequest reports "characteristic not found"', async () => {
         await feature.unsubscribeRequest(event, 'call-1', 'p1', 'missing-char')
         const payload = lastResponsePayload()

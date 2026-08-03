@@ -121,7 +121,16 @@ class NativeUISupport extends Feature {
   }
 
   quitRequest() {
-    app.incyclistApp.quit();
+    // Route through the same 'app-event'/closing:true handshake used by the window's
+    // close (X) button, instead of calling app.incyclistApp.quit() directly. That
+    // shortcut skipped the renderer entirely - onAppExit() (MQTT session-end message,
+    // device teardown) never ran, and the "Disconnecting..." UI never showed.
+    const mainWindow = app.incyclistApp.getMainWindow();
+    if (mainWindow) {
+      mainWindow.send('app-event', {component:'app', closing:true});
+    } else {
+      app.incyclistApp.quit();
+    }
   }
 
   sendBroadcast(event) {

@@ -12,6 +12,18 @@ const AUTH_TIMEOUT_MS = 5*60*1000; // give the user enough time to log in + solv
 
 const CALLBACK_RESPONSE_HTML = '<html><body>You can close this window and return to Incyclist.</body></html>';
 
+// Avoids a regex (e.g. /\/+$/) here: a quantified-then-anchored pattern like
+// that has quadratic worst-case backtracking (SonarQube flagged this).
+// oauthUrl is a local setting, not attacker input, so the practical risk is
+// close to none - but a single linear scan is just as simple and provably
+// avoids the class of issue entirely.
+function trimTrailingSlashes(value) {
+    let end = value.length
+    while (end > 0 && value[end-1] === '/')
+        end--
+    return value.slice(0, end)
+}
+
 class OauthFeature extends Feature{
 
     static _instance;
@@ -58,7 +70,7 @@ class OauthFeature extends Feature{
     // when the user abandons the system-browser tab without completing or
     // cancelling - the request just times out after AUTH_TIMEOUT_MS.
     authorize(provider) {
-        const oauthUrl = (app.incyclistApp.settings.oauthUrl || OAUTH_SERVER).replace(/\/+$/,'')
+        const oauthUrl = trimTrailingSlashes(app.incyclistApp.settings.oauthUrl || OAUTH_SERVER)
 
         const codeVerifier = crypto.randomBytes(32).toString('base64url')
         const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')

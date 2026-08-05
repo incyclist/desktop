@@ -1,16 +1,50 @@
 # This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
+#
+# x64 and arm64 AppImages are built in SEPARATE jobs (separate runners, separate node_modules).
+#
+# Why: several native deps (@serialport/bindings-cpp, @stoprocent/noble, usb) ship prebuilt
+# N-API binaries for every platform/arch via prebuildify, loaded at runtime via node-gyp-build.
+# node-gyp-build always prefers a local node_modules/<pkg>/build/Release/*.node over the bundled
+# prebuilds/ folder if one is present. electron-builder's automatic native-module rebuild step
+# (npmRebuild, via @electron/rebuild) compiles these modules from source against the host arch
+# (x64 on this runner) during `npm run make-linux`, which leaves an x86-64 build/Release binary
+# behind in node_modules. Previously make-linux-arm ran immediately afterwards against that same
+# node_modules with no cleanup in between, so the leftover x64 binary rode along unchanged into
+# the "arm64" AppImage - node-gyp-build picked it over the correct arm64 prebuild at runtime,
+# causing a dlopen failure on real ARM64 hardware (e.g. Raspberry Pi) while the rest of the app
+# started fine. Running each arch in its own job guarantees make-linux-arm always starts from a
+# node_modules that has never had an x64 native build performed in it.
+#
+# `npm ci --ignore-scripts` instead of `npm install`: locks installs to package-lock.json, and
+# skips npm lifecycle scripts. Verified locally that this is safe for these two jobs specifically:
+# `@serialport/bindings-cpp`/`usb`/`@stoprocent/noble`'s own "install": "node-gyp-build" scripts
+# are a no-op once a matching prebuild already exists (which it does, for every arch, since they
+# ship via prebuildify) - skipping them does not remove any binary these jobs need. `electron`
+# itself has no install-time download script in this version; its dist zip is fetched by
+# electron-builder during packaging, independent of npm scripts. Full make-linux and
+# make-linux-arm runs were reproduced locally with --ignore-scripts and both completed,
+# producing a working AppImage.
+#
+# Caveat found during that verification (out of scope for this fix, tracked separately): even in
+# an isolated arm64-only job, @electron/rebuild still performs a REAL node-gyp compile for
+# @stoprocent/noble and its @stoprocent/bluetooth-hci-socket dependency (unlike bindings-cpp/usb,
+# neither declares a package.json "binary" field, so @electron/rebuild doesn't recognize them as
+# prebuild-only and attempts a source rebuild regardless of arch) - on this x64 runner, with no
+# arm64 cross-compiler, that silently falls back to compiling for the host arch instead of
+# failing, so the "arm64" package still gets an x86-64 noble.node/bluetooth_hci_socket.node. This
+# job split fully fixes the originally reported serialport/bindings-cpp crash, but BLE via noble
+# on ARM64 may still be affected - needs its own follow-up.
 
 name: Linux Build
 
 on:
   release:
-    types: [created] 
+    types: [created]
   workflow_dispatch:
 
 jobs:
-  build:
-
+  build-x64:
     runs-on: ubuntu-22.04
 
     strategy:
@@ -21,13 +55,13 @@ jobs:
     - uses: actions/checkout@v7
 
     - name: Install snapcraft
-      run: sudo snap install snapcraft --classic        
+      run: sudo snap install snapcraft --classic
 
     - name: install libusb
       run: |
         sudo apt-get update
         sudo apt-get install -y libusb-1.0-0-dev
-        sudo apt-get install -y libudev-dev        
+        sudo apt-get install -y libudev-dev
 
     - name: Retrieve the settings and write them to a file
       env:
@@ -36,20 +70,62 @@ jobs:
         echo $SETTINGS_FILE > ./config/settings.json
         cat ./config/settings.json
 
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ matrix.node-version }}
+
+    - name: Build x64 AppImage
+      run: |
+       npm ci --ignore-scripts
+       npm run make-linux
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: AppImage-x64
+        path: |
+          ./out/make/*.AppImage
+          ./out/make/latest-*.yml
+
+  build-arm64:
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        node-version: [24]
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Install snapcraft
+      run: sudo snap install snapcraft --classic
+
+    - name: install libusb
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libusb-1.0-0-dev
+        sudo apt-get install -y libudev-dev
+
+    - name: Retrieve the settings and write them to a file
+      env:
+        SETTINGS_FILE: ${{ secrets.SETTINGS_FILE }}
+      run: |
+        echo $SETTINGS_FILE > ./config/settings.json
+        cat ./config/settings.json
 
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v7
       with:
         node-version: ${{ matrix.node-version }}
-    - run: |
-       npm install
-       npm run make-linux
-       npm run make-linux-arm
 
+    - name: Build arm64 AppImage
+      run: |
+       npm ci --ignore-scripts
+       npm run make-linux-arm
 
     - uses: actions/upload-artifact@v7
       with:
-        name: AppImage
+        name: AppImage-arm64
         path: |
           ./out/make/*.AppImage
           ./out/make/latest-*.yml

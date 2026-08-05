@@ -304,7 +304,11 @@ class BLEFeature extends Feature {
             }
         }
         else if ( peripheral && !characteristic ) {
-            this.logger.logEvent({message:'error',fn:'subscribeRequest()',error:'characteristic not found', peripheralId, characteristicUUID, available:peripheral?.characteristics?.map(c=>c.uuid)})
+            // FIXES_BACKLOG #30: the peripheral itself is present/connected - only this specific
+            // characteristic UUID is missing from its cached characteristics list. This typically
+            // means an earlier GATT discovery round found it, but a later re-discovery on this same
+            // connection did not reconfirm it (a stale/dropped reference), not that the device is gone.
+            this.logger.logEvent({message:'error',fn:'subscribeRequest()',error:'characteristic not found', peripheralId, characteristicUUID, available:peripheral?.characteristics?.map(c=>c.uuid) })
             error = new Error('characteristic not found');
             ipcResponse(event.sender,'ble-subscribe',callId, error);
         }

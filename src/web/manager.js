@@ -67,16 +67,16 @@ class WindowManager {
     }
 
     closeMainWindow() {
-        let win = this.mainWindow
+        let win = this.mainWindow!==undefined ? this.mainWindow.win : undefined;
 
-        if ( win.webContents!==undefined) {
+        if ( win!==undefined && win.webContents!==undefined) {
             const storage =win.webContents.session;
-            if ( storage!==undefined) 
+            if ( storage!==undefined)
                 storage.flushStorageData();
-        
+
             const cookies = win.webContents.session.cookies;
             if ( cookies!==undefined)
-                cookies.flushStore( function() {});        
+                cookies.flushStore( function() {});
         }
 
     }

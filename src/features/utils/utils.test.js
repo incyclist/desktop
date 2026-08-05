@@ -41,6 +41,19 @@ describe('Features:utils',() => {
             })
         })
 
+        test('unix local video url: keeps the absolute path\'s leading slash', () => {
+            if ( os.platform()==='win32')
+                return;
+            const url = 'video:///home/dirk/incyclist/sonstige/NO_Ocean_Road/NO_Ocean Road.avi'
+            const res = getFileInfo(url, 'video')
+            expect(res).toMatchObject({
+                name: 'NO_Ocean Road.avi',
+                ext: 'avi',
+                filename: '/home/dirk/incyclist/sonstige/NO_Ocean_Road/NO_Ocean Road.avi',
+                outFile: '/home/dirk/incyclist/sonstige/NO_Ocean_Road/NO_Ocean Road.avi'
+            })
+        })
+
         test('encoded web url',()=>{
             const url = 'https://w3schools.com/test%25.jpg'
             const res = getFileInfo( url,'http')

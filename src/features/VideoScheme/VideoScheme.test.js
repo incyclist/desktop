@@ -91,7 +91,7 @@ describe ( 'VideoScheme', ()=>{
 
             cmdMock._handlers['end']();
             const res = await promise;
-            expect(res).toBe('file:///' + path.join(os.tmpdir(), 'ES_MenorcaDemo_preview.png'));
+            expect(res).toBe('file://' + path.join(os.tmpdir(), 'ES_MenorcaDemo_preview.png'));
         });
 
         test('outDir option overrides output folder', async () => {
@@ -101,7 +101,7 @@ describe ( 'VideoScheme', ()=>{
 
             cmdMock._handlers['end']();
             const res = await promise;
-            expect(res).toBe('file:///' + path.join(outDir, 'sample_preview.png'));
+            expect(res).toBe('file://' + path.join(outDir, 'sample_preview.png'));
         });
 
         test('ffmpeg error rejects with parsed message', async () => {

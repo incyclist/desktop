@@ -429,7 +429,7 @@ class IncyclistApp
         this.willQuit = true;        
         e.preventDefault();
         try {
-            await RestLogAdapter.getInstance().flush();
+            await this.restAdapter?.flush();
         } catch  {}
         this.quit();
 

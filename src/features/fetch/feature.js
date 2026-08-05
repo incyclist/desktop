@@ -67,7 +67,7 @@ class FetchFeature extends Feature {
     }
 
     _handleError(url, err, reject) {
-        this.logger.logEvent({ message: 'error', fn: 'fetch', url, error: err.message })
+        //this.logger.logEvent({ message: 'error', fn: 'fetch', url, error: err.message })
         reject(err)
     }
 

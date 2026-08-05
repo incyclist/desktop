@@ -43,15 +43,26 @@ function getFileInfo ( urlStr, scheme='file') {
 
         }
         else if ( decodedUrl.startsWith(`${scheme}:`) || decodedUrl.startsWith('file:') ) {
-            const urlParts = scheme.startsWith('http') ? decodedUrl.split('://') : decodedUrl.split(':///')
-            pathInfo = path.parse(urlParts[1])
+            // Split on the real 2-slash scheme separator, not a literal 3-slash "scheme:///" -
+            // the 3rd slash is the absolute path's own leading slash, not part of the scheme.
+            // Splitting on ":///" discarded it, turning "video:///home/..." into the relative
+            // path "home/...", which fs.existsSync() then resolves against the app's working
+            // directory instead of root and never finds.
+            let rawPath = decodedUrl.split('://')[1]
+
+            // "scheme:///C:/Users/..." -> "/C:/Users/..." after the split above - strip the
+            // extra leading slash for Windows drive-letter paths (Unix absolute paths keep theirs)
+            if ( rawPath.charAt(0)==='/' && rawPath.charAt(2)===':')
+                rawPath = rawPath.substring(1)
+
+            pathInfo = path.parse(rawPath)
             pathInfo.name = pathInfo.base;
             pathInfo.filename = pathInfo.dir+path.sep+pathInfo.name;
             pathInfo.outFile = pathInfo.filename;
             pathInfo.ext = pathInfo.ext.substring(1)
 
             return pathInfo
-            
+
         }
         else pathInfo = path.parse(decodedUrl)
 

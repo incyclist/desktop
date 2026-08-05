@@ -17,7 +17,30 @@
 // find or collide with.
 
 const { contextBridge, ipcRenderer } = require('electron');
-const { parseTrustedOrigin, isTrustedOrigin } = require('./oauth-preload-utils');
+
+// Electron's sandboxed preload environment (the default whenever
+// nodeIntegration:false/contextIsolation:true and sandbox isn't explicitly
+// disabled - see oauth.js's webPreferences) only allows requiring a small
+// allowlist of built-in modules ('electron', 'events', 'timers', 'url').
+// require()-ing a sibling local file like './oauth-preload-utils' fails
+// there ("module not found"), even though the very same require works fine
+// from oauth.js in the unsandboxed main process. So the trusted-origin check
+// is duplicated here, inline, rather than shared via a require - it's kept
+// in sync with oauth-preload-utils.js (the source of truth, unit tested in
+// oauth-preload-utils.test.js) since both are tiny and rarely change.
+const TRUSTED_ORIGIN_ARG_PREFIX = '--incyclist-oauth-origin=';
+
+function parseTrustedOrigin(argv = []) {
+    if (!Array.isArray(argv))
+        return undefined;
+
+    const arg = argv.find(a => typeof a === 'string' && a.startsWith(TRUSTED_ORIGIN_ARG_PREFIX));
+    return arg ? arg.substring(TRUSTED_ORIGIN_ARG_PREFIX.length) : undefined;
+}
+
+function isTrustedOrigin(currentOrigin, trustedOrigin) {
+    return Boolean(currentOrigin) && Boolean(trustedOrigin) && currentOrigin === trustedOrigin;
+}
 
 const trustedOrigin = parseTrustedOrigin(process.argv);
 

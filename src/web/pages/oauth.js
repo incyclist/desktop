@@ -102,6 +102,10 @@ class OAuthWindow extends EventEmitter{
             }
         })
 
+        if (process.env.OAUTH_DEBUG) {
+            this.win.webContents.openDevTools();
+                    
+        }
 
         this.win.on('closed',this.onClosed.bind(this));
         this.win.once('ready-to-show',this.onReady.bind(this));

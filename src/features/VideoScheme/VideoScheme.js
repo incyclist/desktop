@@ -711,8 +711,14 @@ class VideoScheme  extends Feature {
     }
 
     registerRenderer( spec, ipcRenderer) {
+        // 'video.localUrlFix': this installed desktop has the corrected getFileInfo() local
+        // URL parsing (no longer strips a well-formed video:///file:/// URL's own leading
+        // slash - see the getFileInfo fix in this same feature). web-ui checks this to decide
+        // whether it needs to compensate for the old bug itself, since desktop/src only ships
+        // via a new installer, not a hot bundle update - older installs may run this exact
+        // renderer bundle for a while.
         spec.registerFeatures( [
-            'video','video.convert','video.screenshot','video.convertOffline'
+            'video','video.convert','video.screenshot','video.convertOffline','video.localUrlFix'
         ] )
 
         spec.video = {}

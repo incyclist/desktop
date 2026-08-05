@@ -18,6 +18,12 @@ const { ObserverHandler,ipcHandleObserver,ipcCallObserver } = require('../utils/
 const SCHEME = 'video';
 const LOGGER_NAME = 'VideoScheme';
 
+// outFile is an absolute path - Unix ones already carry their own leading slash (getFileInfo
+// preserves it), Windows ones (drive letter, no leading slash) don't. Prepending a fixed
+// 'file:///' unconditionally either double-slashes the Unix case or under-slashes the Windows
+// one - branch on whether the path already has its own leading slash instead.
+const toFileUrl = (outFile) => (outFile.startsWith('/') ? 'file://' : 'file:///') + outFile
+
 const debug  = process.env.DEBUG;
 
 const DEFAULT_PRESET = 'veryfast'
@@ -187,7 +193,7 @@ class VideoScheme  extends Feature {
 
         const pngDir = outDir || (url.startsWith('http') ? os.tmpdir() : undefined)
         const outFile = pngDir ? path.join(pngDir,name.replace(extRegex,'_preview.png')) : filename.replace(extRegex,'_preview.png')
-        const outUrl = 'file:///'+outFile 
+        const outUrl = toFileUrl(outFile)
         const ffmpegProps = {filename:outFile,count:1,timemarks:[position]}
         if (props.size)
             ffmpegProps.size = props.size
@@ -277,7 +283,7 @@ class VideoScheme  extends Feature {
 
     async save(emitter,cmd,outFile) {
         
-        const outUrl = 'file:///'+outFile 
+        const outUrl = toFileUrl(outFile)
         let duration;
 
         const parseTime = (time) => {
@@ -705,8 +711,14 @@ class VideoScheme  extends Feature {
     }
 
     registerRenderer( spec, ipcRenderer) {
+        // 'video.localUrlFix': this installed desktop has the corrected getFileInfo() local
+        // URL parsing (no longer strips a well-formed video:///file:/// URL's own leading
+        // slash - see the getFileInfo fix in this same feature). web-ui checks this to decide
+        // whether it needs to compensate for the old bug itself, since desktop/src only ships
+        // via a new installer, not a hot bundle update - older installs may run this exact
+        // renderer bundle for a while.
         spec.registerFeatures( [
-            'video','video.convert','video.screenshot','video.convertOffline'
+            'video','video.convert','video.screenshot','video.convertOffline','video.localUrlFix'
         ] )
 
         spec.video = {}

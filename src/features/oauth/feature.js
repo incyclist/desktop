@@ -3,6 +3,8 @@ const {ipcMain,app,shell} = require('electron');
 const {ipcCall, ipcCallNoResponse, ipcHandle, ipcHandleNoResponse} = require ('../utils');
 const EventEmitter = require('node:events');
 const http = require('node:http');
+const crypto = require('node:crypto');
+const axios = require('axios');
 const { EventLogger } = require('gd-eventlog');
 
 const OAUTH_SERVER = 'https://auth.incyclist.com/';
@@ -36,9 +38,20 @@ class OauthFeature extends Feature{
     // http://127.0.0.1:<ephemeral-port>/callback instead of a custom URL
     // scheme, so no OS-level protocol registration/packaging changes are
     // needed on any platform, and it works identically in dev and packaged
-    // builds. auth-server's success.ejs/error.ejs need no changes: they
-    // already just echo whatever `sid` they were given back as a redirect
-    // target, so a loopback URL works exactly like the incyclist:// one does.
+    // builds.
+    //
+    // Uses PKCE: a random verifier is generated here and never leaves this
+    // process; only its SHA-256 hash (the "challenge") goes into the browser
+    // URL. auth-server hands back a short-lived, single-use exchange code via
+    // the browser redirect - not the real tokens, since anything placed in
+    // that redirect is reachable by any local process willing to bind a port
+    // on 127.0.0.1. The real tokens are only ever obtained via the direct,
+    // off-browser POST below, which requires presenting the matching
+    // verifier. This closes off a malicious local listener intercepting
+    // *this* flow's tokens; it does not (and structurally cannot, for an
+    // open-source client) stop a malicious local process from phishing the
+    // user through its own, independently-constructed consent flow - see
+    // PR discussion for incyclist-desktop#201 / microservices#133.
     //
     // Trade-off accepted: unlike the embedded-window flow (which could detect
     // the user closing the window as an explicit cancel), there is no signal
@@ -46,6 +59,9 @@ class OauthFeature extends Feature{
     // cancelling - the request just times out after AUTH_TIMEOUT_MS.
     authorize(provider) {
         const oauthUrl = (app.incyclistApp.settings.oauthUrl || OAUTH_SERVER).replace(/\/+$/,'')
+
+        const codeVerifier = crypto.randomBytes(32).toString('base64url')
+        const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')
 
         return new Promise( done => {
             let completed = false
@@ -60,6 +76,17 @@ class OauthFeature extends Feature{
                 if (server)
                     server.close()
                 done(result)
+            }
+
+            const exchangeCode = async (code) => {
+                try {
+                    const res = await axios.post(`${oauthUrl}/${provider}/token`, {code, code_verifier: codeVerifier})
+                    finish({success:true, user: res.data?.user})
+                }
+                catch (err) {
+                    this.logger.logEvent({message:'oauth code exchange failed', provider, error:err.message})
+                    finish({success:false, reason:'code exchange failed'})
+                }
             }
 
             server = http.createServer( (req,res) => {
@@ -85,15 +112,13 @@ class OauthFeature extends Feature{
                     return
                 }
 
-                // Mirrors success.ejs, which spreads whatever fields exist on
-                // user.auth.strava/intervals into the redirect's query string -
-                // pass all of them through unchanged rather than assuming a
-                // fixed set of field names.
-                const authData = {}
-                for (const [key,value] of params.entries())
-                    authData[key] = value
+                const code = params.get('code')
+                if (!code) {
+                    finish({success:false, reason:'no code in callback'})
+                    return
+                }
 
-                finish({success:true, user:{auth:{[provider]:authData}}})
+                exchangeCode(code)
             })
 
             server.on('error', (err) => {
@@ -105,6 +130,7 @@ class OauthFeature extends Feature{
                 const port = server.address().port
                 const redirectUri = `http://127.0.0.1:${port}/callback`
                 const authUrl = `${oauthUrl}/${provider}?sid=${encodeURIComponent(redirectUri)}`
+                    +`&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256`
 
                 this.logger.logEvent({message:'opening system browser for oauth', provider, port})
                 shell.openExternal(authUrl).catch( (err) => {

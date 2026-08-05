@@ -20,16 +20,26 @@ const INSTALL_LOCATION = '/Applications'
 // BundleIsRelocatable forced off.
 async function buildNonRelocatablePkg(appPath, pkgPath, identity) {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'incyclist-pkg-'))
+  const rootPath = path.join(tmpDir, 'root')
   const componentPlistPath = path.join(tmpDir, 'component.plist')
   const componentPkgPath = path.join(tmpDir, `${APP_NAME}-component.pkg`)
 
   try {
-    await execFileAsync('pkgbuild', ['--analyze', '--component', appPath, componentPlistPath])
+    // --component-plist / BundleIsRelocatable only take effect in pkgbuild's
+    // --root mode - --component (single-bundle) mode has no way to override
+    // the generated component plist. So the payload root mirrors the actual
+    // install location (root/Incyclist.app), populated with a real copy of
+    // the already packaged, signed .app - pkgbuild's symlink handling in
+    // --root mode isn't documented, so this avoids relying on it.
+    await fs.mkdir(rootPath, { recursive: true })
+    await fs.cp(appPath, path.join(rootPath, `${APP_NAME}.app`), { recursive: true, verbatimSymlinks: true })
+
+    await execFileAsync('pkgbuild', ['--analyze', '--root', rootPath, componentPlistPath])
     await execFileAsync('/usr/libexec/PlistBuddy', ['-c', 'Set :0:BundleIsRelocatable false', componentPlistPath])
 
     await execFileAsync('pkgbuild', [
+      '--root', rootPath,
       '--install-location', INSTALL_LOCATION,
-      '--component', appPath,
       '--component-plist', componentPlistPath,
       componentPkgPath,
     ])

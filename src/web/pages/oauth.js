@@ -8,7 +8,6 @@ const { buildTrustedOriginArg, getOrigin } = require('../oauth-preload-utils');
 const MAIN_WIN_WIDTH = 400;
 const MAIN_WIN_HEIGHT = 300;
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36'
 const OAUTH_SERVER =  'https://auth.incyclist.com/'
 
 function trimTrailingChars(s, charToTrim) {
@@ -120,7 +119,7 @@ class OAuthWindow extends EventEmitter{
         })
 
 
-        this.win.loadURL(this.pageUrl, {userAgent:USER_AGENT})        
+        this.win.loadURL(this.pageUrl)
     }
 
     show() {

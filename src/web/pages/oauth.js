@@ -3,6 +3,7 @@ const path = require('path')
 const {EventLogger }= require('gd-eventlog');
 const EventEmitter = require('events');
 const { getSourceDir } = require('../../utils');
+const { buildTrustedOriginArg, getOrigin } = require('../oauth-preload-utils');
 
 const MAIN_WIN_WIDTH = 400;
 const MAIN_WIN_HEIGHT = 300;
@@ -44,7 +45,7 @@ class OAuthWindow extends EventEmitter{
             this.pageUrl = trimTrailingChars(this.pageUrl,'/') + `/${provider}?sid=${this.id}`
 
         this.iconUrl = path.join(getSourceDir() ,"./public/favicon.ico");
-        this.preloadUrl = path.join(getSourceDir() ,"./web/preload.js");
+        this.preloadUrl = path.join(getSourceDir() ,"./web/oauth-preload.js");
 
         this.logger = new EventLogger('OAuthWin')
         this.requestLogger = new EventLogger('Requests')
@@ -54,6 +55,15 @@ class OAuthWindow extends EventEmitter{
 
     getId() {
         return this.id
+    }
+
+    // Origin of the configured OAuth server (e.g. https://auth.incyclist.com),
+    // handed to the preload script so it can confirm it is running on
+    // Incyclist's own page before exposing window.api - never on a
+    // third-party provider's domain (strava.com, intervals.icu, ...) that
+    // this window also navigates to during the OAuth redirect flow.
+    getTrustedOrigin() {
+        return getOrigin(this.pageUrl)
     }
 
     setUrl(url) {
@@ -67,22 +77,29 @@ class OAuthWindow extends EventEmitter{
         this.loaded = false;
         this.loadError = false;
 
-        this.win = new BrowserWindow({ 
+        const trustedOrigin = this.getTrustedOrigin();
+
+        this.win = new BrowserWindow({
             show:false,
-            fullscreen: false, 
+            fullscreen: false,
             title:this.app.getName(),
-            icon: this.iconUrl, 
+            icon: this.iconUrl,
             minWidth:1024,
             minHeight:768,
             useContentSize :true,
             allowRunningInsecureContent :true,
             resizable:true,
             webPreferences: {
-                webSecurity:true, 
-                contextIsolation: false,
-                nodeIntegration: true,
-                preload: this.preloadUrl
-            } 
+                webSecurity:true,
+                contextIsolation: true,
+                nodeIntegration: false,
+                preload: this.preloadUrl,
+                // Hands the trusted origin to oauth-preload.js via process.argv -
+                // see oauth-preload-utils.js. Only set if pageUrl could be parsed;
+                // an unset trusted origin means the preload will never expose
+                // window.api on any page (fails closed).
+                additionalArguments: trustedOrigin ? [ buildTrustedOriginArg(trustedOrigin) ] : []
+            }
         })
 
 

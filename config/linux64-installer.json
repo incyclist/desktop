@@ -18,6 +18,7 @@
         "icon": "res/icons/icon_256.png",
         "category": "Games;Sports",
         "maintainer": "Guido Doumen",
+        "syncDesktopName": true,
         "desktop":   {
             "entry": {
                 "name": "Incyclist"

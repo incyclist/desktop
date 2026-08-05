@@ -38,19 +38,19 @@ jobs:
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Retrieve the secret and write it to a file
       env:
         SECRET_FILE: ${{ secrets.SECRET_FILE }}
       run: |
         echo $SECRET_FILE > ./src/secrets.json
-        
-    - uses: actions/setup-node@v4
+
+    - uses: actions/setup-node@v7
       with:
         node-version: lts/*
 
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version: '3.10' 
   
@@ -70,14 +70,14 @@ jobs:
         echo $output
 
     - name: 📊 Upload report
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: playwright-report
         path: playwright-report/
         retention-days: 30
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       if: always()
       with:
         name: test-results

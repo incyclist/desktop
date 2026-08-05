@@ -39,7 +39,7 @@
   "dependencies": {
     "@serialport/bindings-cpp": "^10.8.0",
     "@stoprocent/noble": "^1.19.1",
-    "axios": "^1.18.1",
+    "axios": "^1.19.0",
     "bonjour-service": "^1.4.3",
     "chrome-native-messaging": "^0.2.0",
     "electron-squirrel-startup": "^1.0.1",

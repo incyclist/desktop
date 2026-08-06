@@ -1,10 +1,17 @@
 const { app, ipcMain } = require('electron')
-const { ipcHandleNoResponse, ipcHandleSync, ipcCallSync } = require('../utils')
+const { ipcHandleNoResponse, ipcHandleSync, ipcCallSync, ipcCallNoResponse } = require('../utils')
 const Feature = require('../base')
 const WebBleIpcBinding = require('./ipc-binding')
+const WebBleDeviceCache = require('./device-cache')
 const { EventLogger } = require('gd-eventlog')
 
 const CONNECT_TARGET_TIMEOUT = 30 * 1000
+
+// how long a device that just failed its GATT probe is skipped for, so it doesn't
+// keep re-winning the chooser's next slot at the expense of other devices (e.g. a
+// nearby non-fitness BLE device that will never connect). Devices we've explicitly
+// asked to connect to (connectTargetMacs) are exempt — see _inCooldown().
+const PROBE_FAILURE_COOLDOWN = 60 * 1000
 
 // linux has no native BLE binding, so WebBLE is its only option. win32 has WinrtBindings
 // as the default and stable path — WebBLE is announced there too so web-ui can opt
@@ -18,6 +25,7 @@ class WebBleFeature extends Feature {
     constructor() {
         super()
         this.logger = new EventLogger('WebBLE')
+        this.deviceCache = WebBleDeviceCache.getInstance()
 
         // Scanning and connecting are independent: a connect request must never
         // stop the request loop, otherwise no further devices get discovered.
@@ -37,6 +45,17 @@ class WebBleFeature extends Feature {
         // approved per requestDevice call, so this maps 1:1 to the device object
         // that requestDevice resolves with — consumed via takeApproved().
         this.lastApproved = null             // { deviceId, deviceName }
+
+        // MACs ever explicitly requested via connect() (i.e. a device the app already
+        // knows about and specifically wants) — these never get cooled down, however
+        // often their probe fails. Deliberately never reset by startScan(): unlike
+        // discoveredDeviceIds, "this is a device we care about" doesn't expire per scan.
+        this.connectTargetMacs = new Set()
+        // deviceId → cooldown-expiry timestamp. Skips a device that just failed its
+        // GATT probe so it doesn't keep re-winning the chooser's next slot at the
+        // expense of other devices. Also not reset by startScan() — that reset is
+        // exactly what let a persistently-failing device win every fresh scan cycle.
+        this.probeCooldowns = new Map()
 
         this._scanLoopTimeout = null
         this._iterationInFlight = false
@@ -63,6 +82,76 @@ class WebBleFeature extends Feature {
 
     _shouldLoop() {
         return this.scanning || this._hasConnectTarget()
+    }
+
+    /**
+     * A device we explicitly asked to connect to — this session (connectTargetMacs)
+     * or a previous one (persisted device cache) — is never in cooldown. For anything
+     * else, an unexpired cooldown entry (set via reportProbeFailed) excludes it from
+     * the next chooser slot.
+     */
+    _inCooldown(deviceId) {
+        if (this.connectTargetMacs.has(deviceId) || this.deviceCache.isGood(deviceId)) return false
+        const expires = this.probeCooldowns.get(deviceId)
+        if (!expires) return false
+        if (Date.now() > expires) {
+            this.probeCooldowns.delete(deviceId)
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Relays a log event from the renderer (ipc-binding.js). The renderer can't use
+     * gd-eventlog directly for this: it's loaded via the preload's own require() graph,
+     * a different module instance than the one web-ui's bundle registers adapters on —
+     * so a renderer-local EventLogger would silently have no adapters. Routing through
+     * here reuses this (main-process) logger, which already has them.
+     */
+    log(event) {
+        this.logger.logEvent(event)
+    }
+
+    /**
+     * Called (via IPC) by the renderer when a device's GATT probe fails after
+     * retries. Devices we explicitly requested via connect() are exempt — we want
+     * those retried as eagerly as possible, not deprioritized. Anything else is
+     * also recorded in the persisted device cache — repeated failures across
+     * sessions eventually blacklist a device outright (see device-cache.js).
+     */
+    reportProbeFailed(deviceId, deviceName) {
+        if (this.connectTargetMacs.has(deviceId)) {
+            this.logger.logEvent({ message: 'probe failed, retrying eagerly (explicitly requested device)', deviceId })
+            return
+        }
+        this.probeCooldowns.set(deviceId, Date.now() + PROBE_FAILURE_COOLDOWN)
+        this.logger.logEvent({ message: 'probe failed, entering cooldown', deviceId, cooldownMs: PROBE_FAILURE_COOLDOWN })
+        this.deviceCache.recordFailure(deviceId, deviceName)
+    }
+
+    /**
+     * Called (via IPC) when a device's full GATT service list — successfully read,
+     * unlike a probe failure — shares nothing with our known fitness services. A
+     * stronger, immediate signal than reportProbeFailed: the connection worked, so
+     * this isn't a fluke, it's confirmed to be the wrong kind of device. Blacklists
+     * outright instead of waiting for repeated misses.
+     */
+    reportUnsupportedDevice(deviceId, deviceName) {
+        if (this.connectTargetMacs.has(deviceId)) return
+        this.deviceCache.markBad(deviceId, deviceName)
+        this.logger.logEvent({ message: 'device confirmed unsupported', deviceId, deviceName })
+    }
+
+    /**
+     * Called (via IPC) by the renderer when a GATT connect actually succeeds — the
+     * reliable "this MAC is a device we use" signal. This is deliberately separate
+     * from connect(): that fires only on its 'approval' fallback source, which in a
+     * normal session (device already found by the scan loop) is rarely reached.
+     */
+    reportConnectSucceeded(deviceId, deviceName) {
+        this.connectTargetMacs.add(deviceId)
+        this.deviceCache.markGood(deviceId, deviceName)
+        this.logger.logEvent({ message: 'connect succeeded', deviceId, deviceName })
     }
 
     _approve(device, callback) {
@@ -116,10 +205,23 @@ class WebBleFeature extends Feature {
         }
 
         if (this.scanning) {
-            // Only named devices get approved. When nothing usable is new, the
-            // callback is parked below — the event re-fires on device list changes.
-            const newDevice = deviceList.find(d =>
-                !this.discoveredDeviceIds.has(d.deviceId) && this._isUsableName(d.deviceName))
+            // Devices known to never work (persisted, repeated failures) are
+            // excluded outright — not even as a last resort.
+            const candidates = deviceList.filter(d =>
+                !this.discoveredDeviceIds.has(d.deviceId) &&
+                this._isUsableName(d.deviceName) &&
+                !this.deviceCache.isBad(d.deviceId))
+
+            // tier 1: a device we already know we want (this session or a previous
+            // one) always wins, regardless of chooser order or cooldown.
+            let newDevice = candidates.find(d =>
+                this.connectTargetMacs.has(d.deviceId) || this.deviceCache.isGood(d.deviceId))
+            // tier 2: anything not currently cooled down from a recent probe failure.
+            if (!newDevice) newDevice = candidates.find(d => !this._inCooldown(d.deviceId))
+            // tier 3: nothing better available this round — try a parked/cooled-down
+            // candidate anyway rather than leaving the chooser idle until it expires.
+            if (!newDevice) newDevice = candidates[0]
+
             if (newDevice) {
                 this._approve(newDevice, callback)
                 return
@@ -165,6 +267,8 @@ class WebBleFeature extends Feature {
 
     connect(deviceId) {
         this.logger.logEvent({ message: 'connect', deviceId })
+        this.connectTargetMacs.add(deviceId)
+        this.deviceCache.markGood(deviceId)
         this.connectTargetId = deviceId
         this.connectTargetExpires = Date.now() + CONNECT_TARGET_TIMEOUT
 
@@ -262,6 +366,10 @@ class WebBleFeature extends Feature {
         ipcHandleNoResponse('webble-disconnect', this.disconnect.bind(this), ipcMain)
         ipcHandleSync('webble-get-mac', this.getMac.bind(this), ipcMain)
         ipcHandleSync('webble-take-approved', this.takeApproved.bind(this), ipcMain)
+        ipcHandleNoResponse('webble-probe-failed', this.reportProbeFailed.bind(this), ipcMain)
+        ipcHandleNoResponse('webble-connect-succeeded', this.reportConnectSucceeded.bind(this), ipcMain)
+        ipcHandleNoResponse('webble-unsupported-device', this.reportUnsupportedDevice.bind(this), ipcMain)
+        ipcHandleNoResponse('webble-log', this.log.bind(this), ipcMain)
     }
 
     registerRenderer(spec, ipcRenderer) {
@@ -293,6 +401,10 @@ class WebBleFeature extends Feature {
 
         spec.webble.getMac = ipcCallSync('webble-get-mac', ipcRenderer)
         spec.webble.takeApproved = ipcCallSync('webble-take-approved', ipcRenderer)
+        spec.webble.reportProbeFailed = ipcCallNoResponse('webble-probe-failed', ipcRenderer)
+        spec.webble.reportConnectSucceeded = ipcCallNoResponse('webble-connect-succeeded', ipcRenderer)
+        spec.webble.reportUnsupportedDevice = ipcCallNoResponse('webble-unsupported-device', ipcRenderer)
+        spec.webble.log = ipcCallNoResponse('webble-log', ipcRenderer)
 
         // 'webble-services': binding supports setSupportedServices() (devices lib
         // announces its BLE service list — no desktop release needed for new services)

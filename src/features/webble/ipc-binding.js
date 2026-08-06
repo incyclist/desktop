@@ -40,6 +40,7 @@ class WebBleIpcBinding extends EventEmitter {
         this.api = null
         this.stopRequested = false
         this._stateEmitted = false
+        this._serverDebug = false
 
         // Device identity:
         // - The MAC address (deviceId that main captures from select-bluetooth-device)
@@ -83,6 +84,21 @@ class WebBleIpcBinding extends EventEmitter {
         return this.api
     }
 
+    /**
+     * Structured-log relay to main (see feature.js#log for why this can't just be a
+     * local EventLogger instance). Best-effort: falls back to nothing if the api
+     * surface isn't wired yet (e.g. in tests that don't stub it).
+     *
+     * debug:true marks routine/expected events (still sent to production logs for
+     * now, while this binding is under active investigation) so they can be filtered
+     * out later without touching call sites. Failures are never marked debug.
+     */
+    _log(event) {
+        if (event?.debug && !this._serverDebug)
+            return
+        this.getApi()?.log?.(event)
+    }
+
     get state() {
         return this._state
     }
@@ -93,7 +109,9 @@ class WebBleIpcBinding extends EventEmitter {
 
     pauseLogging() {}
     resumeLogging() {}
-    setServerDebug(_enabled) {}
+    setServerDebug(_enabled) {
+        this._serverDebug = _enabled
+    }
 
     /**
      * Called by the devices lib (feature-detected, optional in its BleBinding
@@ -113,7 +131,7 @@ class WebBleIpcBinding extends EventEmitter {
         }
         this._knownServiceUUIDs = [...byFullUUID.values()]
         this._optionalServices = [...byFullUUID.keys()]
-        console.log('[WebBLE] supported services set:', this._optionalServices.length)
+        this._log({ message: 'supported services set', count: this._optionalServices.length, debug: true })
     }
 
     on(event, callback) {
@@ -145,7 +163,7 @@ class WebBleIpcBinding extends EventEmitter {
             if (seen.has(entry)) continue
             seen.add(entry)
             if (!entry.probed || !entry.name || !entry.mac) continue
-            console.log('[WebBLE] startScanning: re-emitting', entry.name, entry.serviceUuids)
+            this._log({ message: 'startScanning: re-emitting', device: entry.name, serviceUuids: entry.serviceUuids, debug: true })
             const peripheral = this._createPeripheral({ id: entry.mac, name: entry.name, serviceUuids: entry.serviceUuids })
             this.emit('discover', peripheral)
         }
@@ -159,7 +177,7 @@ class WebBleIpcBinding extends EventEmitter {
     async _discoverApprovedDevices() {
         try {
             const devices = await navigator.bluetooth.getDevices()
-            console.log('[WebBLE] getDevices returned', devices.length, 'device(s)', devices.map(d => d.name))
+            this._log({ message: 'getDevices returned', count: devices.length, devices: devices.map(d => d.name), debug: true })
             for (const device of devices) {
                 if (this.stopRequested) break
                 const entry = this._deviceCache.get(device.id)
@@ -168,7 +186,7 @@ class WebBleIpcBinding extends EventEmitter {
                 }
             }
         } catch (err) {
-            console.log('[WebBLE] getDevices failed:', err?.message)
+            this._log({ message: 'getDevices failed', error: err?.message })
         }
     }
 
@@ -228,7 +246,7 @@ class WebBleIpcBinding extends EventEmitter {
      * share the same name.
      */
     async _processDiscoveredDevice(device, approved = false) {
-        console.log('[WebBLE] _processDiscoveredDevice', device.name, 'approved:', approved)
+        this._log({ message: '_processDiscoveredDevice', device: device.name, approved, debug: true })
 
         let mac = null
         if (approved) {
@@ -241,7 +259,7 @@ class WebBleIpcBinding extends EventEmitter {
         // Anonymous devices — fitness devices always have names and the adapter drops
         // nameless peripherals anyway. Skipping GATT here avoids wasting ~1s per device.
         if (!device.name) {
-            console.log('[WebBLE] skipping anonymous device', device.id)
+            this._log({ message: 'skipping anonymous device', deviceId: device.id, debug: true })
             entry.probed = true
             return
         }
@@ -250,7 +268,7 @@ class WebBleIpcBinding extends EventEmitter {
         // opaque id may have changed, but the services are known: re-emit from cache.
         if (entry.probed) {
             const id = entry.mac ?? entry.opaqueId
-            console.log('[WebBLE] re-emitting known device', entry.name, 'id:', id)
+            this._log({ message: 're-emitting known device', device: entry.name, id, debug: true })
             const peripheral = this._createPeripheral({ id, name: entry.name, serviceUuids: entry.serviceUuids })
             this.emit('discover', peripheral)
             return
@@ -260,10 +278,26 @@ class WebBleIpcBinding extends EventEmitter {
         // has been handed over; don't delay the connection with a GATT probe.
         if (hadPendingConnect) return
 
+        // Every device is probed live, even a known-good one — some devices (e.g. a
+        // rower whose FTMS service only appears once its GATT server has fully
+        // initialised) report different, incomplete service sets depending on
+        // exactly when they're probed. Reusing a remembered list across launches
+        // risks permanently hiding a capability the device actually has, so the
+        // "good" cache only ever influences chooser priority (see feature.js), never
+        // what gets announced here.
         const serviceUuids = await this._probeServices(device)
         if (serviceUuids === null) {
-            // probe failed or timed out — leave probed=false so the next encounter retries
+            // probe failed or timed out — leave probed=false so the next encounter retries.
+            // Tell main so it can cool this device down instead of re-offering it (and
+            // burning another full probe) on every subsequent chooser slot.
+            this.getApi().reportProbeFailed?.(entry.mac ?? entry.opaqueId, device.name)
             return
+        }
+        // The probe succeeded (we connected and read services) but none of them are
+        // ours — a stronger signal than a mere connect failure: this is confirmed to
+        // be the wrong kind of device, not just a flaky one.
+        if (!this._hasKnownService(serviceUuids) && !device.name?.startsWith('Zwift')) {
+            this.getApi().reportUnsupportedDevice?.(entry.mac ?? entry.opaqueId, device.name)
         }
         entry.serviceUuids = serviceUuids
         entry.probed = true
@@ -276,7 +310,7 @@ class WebBleIpcBinding extends EventEmitter {
             // Release the probe connection: a GATT-connected device stops advertising
             // and would never show up in the scan loop's chooser to get its MAC.
             try { device.gatt.disconnect() } catch {}
-            console.log('[WebBLE] deferring emit for', device.name, '— MAC not known yet')
+            this._log({ message: 'deferring emit — MAC not known yet', device: device.name, debug: true })
             return
         }
 
@@ -288,7 +322,7 @@ class WebBleIpcBinding extends EventEmitter {
         this._scheduleGattRelease(entry)
 
         const id = entry.mac ?? entry.opaqueId
-        console.log('[WebBLE] emitting discover for', device.name, 'services:', serviceUuids, 'id:', id)
+        this._log({ message: 'emitting discover for', device: device.name, services: serviceUuids, id, debug: true })
         const peripheral = this._createPeripheral({ id, name: device.name, serviceUuids })
         this.emit('discover', peripheral)
     }
@@ -299,10 +333,14 @@ class WebBleIpcBinding extends EventEmitter {
      * probe failed or timed out.
      */
     async _probeServices(device) {
-        console.log('[WebBLE] connecting to', device.name, 'for service discovery')
+        this._log({ message: 'GATT connecting to', device: device.name, debug: true })
         try {
-            const server = await this._withTimeout(device.gatt.connect(), this._probeTimeoutMs, 'GATT probe connect')
-            console.log('[WebBLE] GATT connected to', device.name)
+            // reuses the same retry-with-backoff helper the real pairing connect uses
+            // (_gattConnectRetries attempts) — a one-off GATT hiccup during discovery
+            // shouldn't be treated as a permanent failure any more than it would be
+            // when actually connecting
+            const server = await this._gattConnect(device)
+            this._log({ message: 'GATT connected to', device: device.name, debug: true })
 
             const services = await this._withTimeout(this._getServerServices(server), this._probeTimeoutMs, 'service discovery')
 
@@ -315,10 +353,15 @@ class WebBleIpcBinding extends EventEmitter {
             // connection is kept for an imminent connect or released
             return serviceUuids
         } catch (err) {
-            console.log('[WebBLE] GATT service discovery failed for', device.name, err?.message)
+            this._log({ message: 'GATT probe failed', device: device.name, error: err?.message })
             try { device.gatt.disconnect() } catch {}
             return null
         }
+    }
+
+    /** Whether a probed service list includes any of the services we actually use. */
+    _hasKnownService(serviceUuids) {
+        return serviceUuids.some(u => this._knownServiceUUIDs.some(k => toFullUUID(k) === toFullUUID(u)))
     }
 
     /**
@@ -354,7 +397,7 @@ class WebBleIpcBinding extends EventEmitter {
             if (entry.inUse) return
             try {
                 if (entry.device?.gatt?.connected) {
-                    console.log('[WebBLE] releasing unclaimed GATT connection for', entry.name)
+                    this._log({ message: 'releasing unclaimed GATT connection', device: entry.name, debug: true })
                     entry.device.gatt.disconnect()
                 }
             } catch {}
@@ -445,7 +488,7 @@ class WebBleIpcBinding extends EventEmitter {
             device = await this._waitForDevice(peripheral.id)
         }
 
-        console.log('[WebBLE] connectPeripheral', peripheral.name, 'via', source)
+        this._log({ message: 'connectPeripheral', device: peripheral.name, source, debug: true })
 
         // claim the device: a probe connection kept alive for this device is reused,
         // and the grace-period release must not tear down an in-use connection
@@ -460,7 +503,13 @@ class WebBleIpcBinding extends EventEmitter {
 
         peripheral._server = await this._gattConnect(device)
         peripheral.state = 'connected'
-        console.log('[WebBLE] connectPeripheral done', peripheral.name)
+        this._log({ message: 'connectPeripheral done', device: peripheral.name, debug: true })
+
+        // The real "this MAC is a device we actually use" signal — hit regardless of
+        // which source resolved it above (unlike feature.js's connect(), which is
+        // only reached via the 'approval' source and rarely fires in a normal
+        // session where the device was already found by the scan loop).
+        this.getApi().reportConnectSucceeded?.(entry.mac ?? peripheral.id, peripheral.name)
     }
 
     _waitForDevice(id) {
@@ -488,7 +537,7 @@ class WebBleIpcBinding extends EventEmitter {
                 return await this._withTimeout(device.gatt.connect(), this._gattConnectTimeoutMs, 'GATT connect')
             } catch (err) {
                 lastErr = err
-                console.log('[WebBLE] GATT connect attempt', attempt, 'failed for', device.name, err?.message)
+                this._log({ message: 'GATT connect attempt failed', attempt, device: device.name, error: err?.message })
                 if (attempt < this._gattConnectRetries)
                     await new Promise(res => setTimeout(res, this._gattRetryDelayMs))
             }
@@ -517,13 +566,13 @@ class WebBleIpcBinding extends EventEmitter {
      */
     async _reviveDeadServer(peripheral) {
         if (!peripheral._device || peripheral._server?.connected) return false
-        console.log('[WebBLE] GATT server dead for', peripheral.name, '— reconnecting')
+        this._log({ message: 'GATT server dead — reconnecting', device: peripheral.name, debug: true })
         try {
             peripheral._server = await this._gattConnect(peripheral._device)
             peripheral.state = 'connected'
             return true
         } catch (err) {
-            console.log('[WebBLE] GATT reconnect failed for', peripheral.name, err?.message)
+            this._log({ message: 'GATT reconnect failed', device: peripheral.name, error: err?.message })
             return false
         }
     }
@@ -552,7 +601,7 @@ class WebBleIpcBinding extends EventEmitter {
             peripheral.state = 'connected'
             return true
         } catch (err) {
-            console.log('[WebBLE] on-demand GATT connect failed for', peripheral.name, err?.message)
+            this._log({ message: 'on-demand GATT connect failed', device: peripheral.name, error: err?.message })
             return false
         }
     }

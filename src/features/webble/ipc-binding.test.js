@@ -61,6 +61,10 @@ const makeApi = (overrides = {}) => ({
     disconnect: jest.fn(),
     getMac: jest.fn().mockReturnValue(null),
     takeApproved: jest.fn().mockReturnValue(null),
+    reportProbeFailed: jest.fn(),
+    reportConnectSucceeded: jest.fn(),
+    reportUnsupportedDevice: jest.fn(),
+    log: jest.fn(),
     ...overrides,
 })
 
@@ -215,8 +219,46 @@ describe('WebBleIpcBinding — no-op methods', () => {
         expect(() => new WebBleIpcBinding().resumeLogging()).not.toThrow()
     })
 
-    test('setServerDebug does not throw', () => {
-        expect(() => new WebBleIpcBinding().setServerDebug(true)).not.toThrow()
+})
+
+// ── _log / setServerDebug ─────────────────────────────────────────────────────
+
+describe('WebBleIpcBinding — _log / setServerDebug', () => {
+
+    let binding, api
+
+    beforeEach(() => {
+        api = makeApi()
+        binding = new WebBleIpcBinding()
+        binding.setApi(api)
+    })
+
+    test('debug:true events are suppressed by default', () => {
+        binding._log({ message: 'routine', debug: true })
+        expect(api.log).not.toHaveBeenCalled()
+    })
+
+    test('non-debug events are always relayed, regardless of server-debug state', () => {
+        binding._log({ message: 'GATT probe failed' })
+        expect(api.log).toHaveBeenCalledWith({ message: 'GATT probe failed' })
+    })
+
+    test('setServerDebug(true) lets debug:true events through', () => {
+        binding.setServerDebug(true)
+        binding._log({ message: 'routine', debug: true })
+        expect(api.log).toHaveBeenCalledWith({ message: 'routine', debug: true })
+    })
+
+    test('setServerDebug(false) re-suppresses debug:true events', () => {
+        binding.setServerDebug(true)
+        binding.setServerDebug(false)
+        binding._log({ message: 'routine', debug: true })
+        expect(api.log).not.toHaveBeenCalled()
+    })
+
+    test('does not throw when api.log is unavailable', () => {
+        delete api.log
+        expect(() => binding._log({ message: 'x' })).not.toThrow()
     })
 
 })
@@ -425,6 +467,7 @@ describe('WebBleIpcBinding — _processDiscoveredDevice', () => {
         api = makeApi()
         binding = new WebBleIpcBinding()
         binding.setApi(api)
+        binding._gattRetryDelayMs = 1   // probe now retries via _gattConnect — keep tests fast
     })
 
     test('skips anonymous devices without GATT or emit and marks them probed', async () => {
@@ -597,9 +640,25 @@ describe('WebBleIpcBinding — _processDiscoveredDevice', () => {
         expect(discovered[0].advertisement.serviceUuids).not.toContain('180d')
     })
 
+    test('probe failure: retries within the same probe (via _gattConnect) before giving up', async () => {
+        const device = makeBleDevice('dev-1', 'KICKR CORE')
+        device.gatt.connect
+            .mockRejectedValueOnce(new Error('flaky'))
+            .mockResolvedValueOnce(makeGattServer(['1826']))
+
+        const discovered = []
+        binding.on('discover', p => discovered.push(p))
+
+        await binding._processDiscoveredDevice(device, true)
+
+        expect(device.gatt.connect).toHaveBeenCalledTimes(2)
+        expect(discovered).toHaveLength(1)
+        expect(discovered[0].advertisement.serviceUuids).toEqual(['1826'])
+    })
+
     test('probe failure: emits nothing and stays retryable — succeeds on next encounter', async () => {
         const device = makeBleDevice('dev-1', 'KICKR CORE')
-        device.gatt.connect.mockRejectedValueOnce(new Error('connection failed'))
+        device.gatt.connect.mockRejectedValue(new Error('connection failed'))   // fails every attempt/retry
 
         const discovered = []
         binding.on('discover', p => discovered.push(p))
@@ -617,8 +676,70 @@ describe('WebBleIpcBinding — _processDiscoveredDevice', () => {
         expect(discovered[0].advertisement.serviceUuids).toEqual(['1826'])
     })
 
+    test('probe failure: reports the MAC (or opaque id) to main so it can be cooled down', async () => {
+        api.takeApproved.mockReturnValue('D4:C9:BB:7D:CB:AF')
+        const device = makeBleDevice('opaque-1', 'Volt')
+        device.gatt.connect.mockRejectedValue(new Error('GATT probe connect timeout'))
+
+        await binding._processDiscoveredDevice(device, true)
+
+        expect(api.reportProbeFailed).toHaveBeenCalledWith('D4:C9:BB:7D:CB:AF', 'Volt')
+    })
+
+    test('probe success: does not report a probe failure', async () => {
+        const device = makeBleDevice('dev-1', 'KICKR', makeGattServer(['1826']))
+
+        await binding._processDiscoveredDevice(device, true)
+
+        expect(api.reportProbeFailed).not.toHaveBeenCalled()
+    })
+
+    test('probe failure: relays a log event to main via api.log, not marked debug (visible in structured logs, unlike console.log)', async () => {
+        const device = makeBleDevice('dev-1', 'Volt')
+        device.gatt.connect.mockRejectedValue(new Error('GATT probe connect timeout'))
+
+        await binding._processDiscoveredDevice(device, true)
+
+        expect(api.log).toHaveBeenCalledWith(
+            expect.objectContaining({ message: 'GATT probe failed', device: 'Volt' })
+        )
+        const failureEvent = api.log.mock.calls.map(c => c[0]).find(e => e.message === 'GATT probe failed')
+        expect(failureEvent.debug).toBeUndefined()
+    })
+
+    test('probe success: relays connecting/connected log events to main via api.log, marked debug:true', async () => {
+        binding.setServerDebug(true)
+        const device = makeBleDevice('dev-1', 'Volt', makeGattServer(['1826']))
+
+        await binding._processDiscoveredDevice(device, true)
+
+        expect(api.log).toHaveBeenCalledWith(
+            expect.objectContaining({ message: 'GATT connecting to', device: 'Volt', debug: true })
+        )
+        expect(api.log).toHaveBeenCalledWith(
+            expect.objectContaining({ message: 'GATT connected to', device: 'Volt', debug: true })
+        )
+    })
+
+    test('logging is best-effort: does not throw when api.log is unavailable (older shell)', async () => {
+        delete api.log
+        const device = makeBleDevice('dev-1', 'Volt')
+        device.gatt.connect.mockRejectedValue(new Error('boom'))
+
+        await expect(binding._processDiscoveredDevice(device, true)).resolves.not.toThrow()
+    })
+
+    test('probe failure: does not throw when api.reportProbeFailed is unavailable (older shell)', async () => {
+        delete api.reportProbeFailed
+        const device = makeBleDevice('dev-1', 'KICKR CORE')
+        device.gatt.connect.mockRejectedValue(new Error('boom'))
+
+        await expect(binding._processDiscoveredDevice(device, true)).resolves.not.toThrow()
+    })
+
     test('probe timeout: a hanging GATT connect does not block processing forever', async () => {
-        binding._probeTimeoutMs = 50
+        binding._gattConnectTimeoutMs = 50
+        binding._gattConnectRetries = 1
         const device = makeBleDevice('dev-1', 'Stuck Device')
         device.gatt.connect.mockReturnValue(new Promise(() => {}))   // never settles
 
@@ -679,6 +800,51 @@ describe('WebBleIpcBinding — _processDiscoveredDevice', () => {
         await binding._processDiscoveredDevice(device, true)
 
         expect(device.gatt.disconnect).toHaveBeenCalled()
+    })
+
+    test('probe succeeds but no known service matches: reports the device as unsupported', async () => {
+        // e.g. a JBL speaker — connects fine, but its services are nothing we use
+        const server = makeGattServer(['110b'])   // A2DP Audio Sink — not a fitness service
+        const device = makeBleDevice('dev-1', 'JBL PartyBox Club 120', server)
+
+        const discovered = []
+        binding.on('discover', p => discovered.push(p))
+
+        await binding._processDiscoveredDevice(device, true)
+
+        // still emitted — interface.ts does its own filtering too — but main is told
+        // so it can blacklist the device outright instead of re-offering it
+        expect(discovered).toHaveLength(1)
+        expect(api.reportUnsupportedDevice).toHaveBeenCalledWith('dev-1', 'JBL PartyBox Club 120')
+    })
+
+    test('probe succeeds with a matching known service: does not report unsupported', async () => {
+        const server = makeGattServer(['1826'])
+        const device = makeBleDevice('dev-1', 'KICKR CORE', server)
+
+        await binding._processDiscoveredDevice(device, true)
+
+        expect(api.reportUnsupportedDevice).not.toHaveBeenCalled()
+    })
+
+    test('Zwift-named devices are never reported unsupported, even with no matching services', async () => {
+        const server = makeGattServer(['110b'])
+        const device = makeBleDevice('dev-1', 'Zwift Cog', server)
+
+        await binding._processDiscoveredDevice(device, true)
+
+        expect(api.reportUnsupportedDevice).not.toHaveBeenCalled()
+    })
+
+    test('a known-good device is still probed live — persisted status never skips the real probe', async () => {
+        // e.g. a rower whose FTMS service only appears once fully initialised — a
+        // remembered service list from a previous session could be stale/incomplete
+        api.takeApproved.mockReturnValue('D4:C9:BB:7D:CB:AF')
+        const device = makeBleDevice('opaque-1', 'Volt', makeGattServer(['1826']))
+
+        await binding._processDiscoveredDevice(device, true)
+
+        expect(device.gatt.connect).toHaveBeenCalled()
     })
 
     test('stores device and serviceUuids in cache after discovery', async () => {
@@ -765,6 +931,17 @@ describe('WebBleIpcBinding — _processDiscoveredDevice', () => {
         expect(discovered).toHaveLength(0)
     })
 
+    test('logs entry into _processDiscoveredDevice as debug:true', async () => {
+        binding.setServerDebug(true)
+        const device = makeBleDevice('dev-1', 'KICKR', makeGattServer(['1826']))
+
+        await binding._processDiscoveredDevice(device, true)
+
+        expect(api.log).toHaveBeenCalledWith(
+            expect.objectContaining({ message: '_processDiscoveredDevice', device: 'KICKR', approved: true, debug: true })
+        )
+    })
+
     test('discovered peripheral has Noble-compatible shape', async () => {
         const server = makeGattServer(['180d'])
         const device = makeBleDevice('dev-1', 'HRM Pro', server)
@@ -825,6 +1002,36 @@ describe('WebBleIpcBinding — _connectPeripheral', () => {
         expect(peripheral._server).toBeDefined()
     })
 
+    test('reports the successful connect to main — even via the common "already cached" source', async () => {
+        const cachedDevice = makeBleDevice('dev-1')
+        binding._cacheDevice(cachedDevice, null)
+
+        const peripheral = getPeripheral('dev-1', 'Trainer')
+        await peripheral.connectAsync()
+
+        expect(api.reportConnectSucceeded).toHaveBeenCalledWith('dev-1', 'Trainer')
+    })
+
+    test('does not report a connect success when the connect fails', async () => {
+        binding._gattConnectRetries = 1
+        const device = makeBleDevice('dev-1')
+        device.gatt.connect.mockRejectedValue(new Error('unreachable'))
+        binding._cacheDevice(device, null)
+
+        const peripheral = getPeripheral()
+        await expect(peripheral.connectAsync()).rejects.toThrow('unreachable')
+
+        expect(api.reportConnectSucceeded).not.toHaveBeenCalled()
+    })
+
+    test('does not throw when api.reportConnectSucceeded is unavailable (older shell)', async () => {
+        delete api.reportConnectSucceeded
+        const cachedDevice = makeBleDevice('dev-1')
+        binding._cacheDevice(cachedDevice, null)
+
+        await expect(getPeripheral().connectAsync()).resolves.not.toThrow()
+    })
+
     test('resolves the cache by MAC when the device was approved with one (bug 1 regression)', async () => {
         // scan loop discovered Volt: opaque id + MAC recorded via takeApproved
         api.takeApproved.mockReturnValue('D4:C9:BB:7D:CB:AF')
@@ -841,6 +1048,8 @@ describe('WebBleIpcBinding — _connectPeripheral', () => {
         expect(global.navigator.bluetooth.requestDevice).not.toHaveBeenCalled()
         expect(peripheral.state).toBe('connected')
         expect(peripheral._server).toBeDefined()
+        // reported by MAC, not the stale opaque id from the earlier discovery
+        expect(api.reportConnectSucceeded).toHaveBeenCalledWith('D4:C9:BB:7D:CB:AF', 'Volt')
     })
 
     test('falls back to getDevices exact-id match when device not in cache', async () => {
@@ -923,6 +1132,37 @@ describe('WebBleIpcBinding — _connectPeripheral', () => {
 
         expect(device.gatt.connect).toHaveBeenCalledTimes(2)
         expect(peripheral.state).toBe('connected')
+    })
+
+    test('logs each failed GATT connect attempt, not marked debug', async () => {
+        const device = makeBleDevice('dev-1', 'Trainer')
+        device.gatt.connect
+            .mockRejectedValueOnce(new Error('flaky'))
+            .mockResolvedValueOnce(makeGattServer())
+        binding._cacheDevice(device, null)
+
+        await getPeripheral('dev-1', 'Trainer').connectAsync()
+
+        expect(api.log).toHaveBeenCalledWith(
+            expect.objectContaining({ message: 'GATT connect attempt failed', attempt: 1, device: 'Trainer', error: 'flaky' })
+        )
+        const attemptEvent = api.log.mock.calls.map(c => c[0]).find(e => e.message === 'GATT connect attempt failed')
+        expect(attemptEvent.debug).toBeUndefined()
+    })
+
+    test('logs connectPeripheral start and completion as debug:true', async () => {
+        binding.setServerDebug(true)
+        const device = makeBleDevice('dev-1', 'Trainer')
+        binding._cacheDevice(device, null)
+
+        await getPeripheral('dev-1', 'Trainer').connectAsync()
+
+        expect(api.log).toHaveBeenCalledWith(
+            expect.objectContaining({ message: 'connectPeripheral', device: 'Trainer', source: 'cache', debug: true })
+        )
+        expect(api.log).toHaveBeenCalledWith(
+            expect.objectContaining({ message: 'connectPeripheral done', device: 'Trainer', debug: true })
+        )
     })
 
     test('rejects when all GATT connect attempts fail', async () => {
@@ -1240,6 +1480,35 @@ describe('WebBleIpcBinding — dead-server recovery', () => {
         const services = await peripheral.discoverServicesAsync(['1826'])
 
         expect(services).toEqual([])
+    })
+
+    test('logs the dead-server detection as debug:true, and a failed reconnect as not debug', async () => {
+        // connected:undefined (not explicitly false) — _ensureServer treats this as
+        // usable and skips its own reconnect; only _reviveDeadServer's empty-results
+        // check catches it, which is the actual "looks alive, isn't" race this guards
+        binding.setServerDebug(true)
+        binding._gattConnectRetries = 1
+        const device = makeBleDevice('dev-1', 'Volt')
+        device.gatt.connect.mockRejectedValue(new Error('unreachable'))
+
+        const peripheral = getPeripheral()
+        peripheral._device = device
+        peripheral._server = {
+            connected: undefined,
+            getPrimaryService: jest.fn().mockRejectedValue(new Error('GATT Server is disconnected')),
+        }
+
+        const services = await peripheral.discoverServicesAsync(['1826'])
+
+        expect(services).toEqual([])
+        expect(binding.getApi().log).toHaveBeenCalledWith(
+            expect.objectContaining({ message: 'GATT server dead — reconnecting', device: 'Volt', debug: true })
+        )
+        expect(binding.getApi().log).toHaveBeenCalledWith(
+            expect.objectContaining({ message: 'GATT reconnect failed', device: 'Volt', error: 'unreachable' })
+        )
+        const reconnectFailedEvent = binding.getApi().log.mock.calls.map(c => c[0]).find(e => e.message === 'GATT reconnect failed')
+        expect(reconnectFailedEvent.debug).toBeUndefined()
     })
 
 })

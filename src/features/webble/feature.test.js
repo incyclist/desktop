@@ -10,6 +10,7 @@ jest.mock('../utils', () => ({
     ipcHandleNoResponse: jest.fn(),
     ipcHandleSync: jest.fn(),
     ipcCallSync: jest.fn(() => jest.fn()),
+    ipcCallNoResponse: jest.fn(() => jest.fn()),
     ipcSendEvent: jest.fn(),
 }))
 
@@ -18,8 +19,18 @@ jest.mock('./ipc-binding', () => {
     return { getInstance: jest.fn(() => ({ setApi })) }
 })
 
+jest.mock('./device-cache', () => ({
+    getInstance: jest.fn(() => ({
+        isGood: jest.fn().mockReturnValue(false),
+        isBad: jest.fn().mockReturnValue(false),
+        markGood: jest.fn(),
+        markBad: jest.fn(),
+        recordFailure: jest.fn(),
+    })),
+}))
+
 const { app } = require('electron')
-const { ipcHandleNoResponse, ipcHandleSync, ipcCallSync, ipcSendEvent } = require('../utils')
+const { ipcHandleNoResponse, ipcHandleSync, ipcCallSync, ipcCallNoResponse, ipcSendEvent } = require('../utils')
 const WebBleFeature = require('./feature')
 
 beforeEach(() => {
@@ -170,6 +181,128 @@ describe('WebBleFeature — connect', () => {
         feature.connect('D4:C9:BB:7D:CB:AF')
 
         expect(feature._triggerScanIteration).toHaveBeenCalled()
+    })
+
+    test('records the MAC as an explicitly requested (cooldown-exempt) device', () => {
+        feature.connect('D4:C9:BB:7D:CB:AF')
+        expect(feature.connectTargetMacs.has('D4:C9:BB:7D:CB:AF')).toBe(true)
+    })
+
+    test('persists the MAC as good, so it is preferred from the very next app launch', () => {
+        feature.connect('D4:C9:BB:7D:CB:AF')
+        expect(feature.deviceCache.markGood).toHaveBeenCalledWith('D4:C9:BB:7D:CB:AF')
+    })
+
+})
+
+// ── _inCooldown / reportProbeFailed ─────────────────────────────────────────────
+
+describe('WebBleFeature — _inCooldown / reportProbeFailed', () => {
+
+    let feature
+
+    beforeEach(() => {
+        feature = new WebBleFeature()
+    })
+
+    test('a device is not in cooldown by default', () => {
+        expect(feature._inCooldown('aa')).toBe(false)
+    })
+
+    test('reportProbeFailed puts a device into cooldown', () => {
+        feature.reportProbeFailed('aa')
+        expect(feature._inCooldown('aa')).toBe(true)
+    })
+
+    test('cooldown expires after PROBE_FAILURE_COOLDOWN', () => {
+        feature.reportProbeFailed('aa')
+        feature.probeCooldowns.set('aa', Date.now() - 1)   // simulate expiry
+        expect(feature._inCooldown('aa')).toBe(false)
+        expect(feature.probeCooldowns.has('aa')).toBe(false)   // cleaned up
+    })
+
+    test('a device explicitly requested via connect() is never in cooldown', () => {
+        feature.connectTargetMacs.add('aa')
+        feature.reportProbeFailed('aa')
+        expect(feature._inCooldown('aa')).toBe(false)
+        expect(feature.probeCooldowns.has('aa')).toBe(false)   // never even recorded
+    })
+
+    test('a device persisted as good (from a previous session) is never in cooldown', () => {
+        feature.deviceCache.isGood.mockReturnValue(true)
+        feature.reportProbeFailed('aa')   // not connectTargetMacs-exempt this session
+        expect(feature._inCooldown('aa')).toBe(false)
+    })
+
+    test('reportProbeFailed records the failure in the persisted device cache', () => {
+        feature.reportProbeFailed('aa', 'JBL PartyBox')
+        expect(feature.deviceCache.recordFailure).toHaveBeenCalledWith('aa', 'JBL PartyBox')
+    })
+
+    test('reportProbeFailed does not record a failure for an explicitly requested device', () => {
+        feature.connectTargetMacs.add('aa')
+        feature.reportProbeFailed('aa', 'Volt')
+        expect(feature.deviceCache.recordFailure).not.toHaveBeenCalled()
+    })
+
+})
+
+// ── reportConnectSucceeded ───────────────────────────────────────────────────────
+
+describe('WebBleFeature — reportConnectSucceeded', () => {
+
+    let feature
+
+    beforeEach(() => {
+        feature = new WebBleFeature()
+    })
+
+    test('persists the MAC as good', () => {
+        feature.reportConnectSucceeded('D4:C9:BB:7D:CB:AF', 'Volt')
+        expect(feature.deviceCache.markGood).toHaveBeenCalledWith('D4:C9:BB:7D:CB:AF', 'Volt')
+    })
+
+    test('exempts the MAC from cooldown for the rest of this session too', () => {
+        feature.reportConnectSucceeded('D4:C9:BB:7D:CB:AF', 'Volt')
+        expect(feature.connectTargetMacs.has('D4:C9:BB:7D:CB:AF')).toBe(true)
+    })
+
+})
+
+// ── reportUnsupportedDevice ───────────────────────────────────────────────────────
+
+describe('WebBleFeature — reportUnsupportedDevice', () => {
+
+    let feature
+
+    beforeEach(() => {
+        feature = new WebBleFeature()
+    })
+
+    test('blacklists the device immediately', () => {
+        feature.reportUnsupportedDevice('aa', 'JBL PartyBox')
+        expect(feature.deviceCache.markBad).toHaveBeenCalledWith('aa', 'JBL PartyBox')
+    })
+
+    test('does not blacklist an explicitly requested device', () => {
+        feature.connectTargetMacs.add('aa')
+        feature.reportUnsupportedDevice('aa', 'Volt')
+        expect(feature.deviceCache.markBad).not.toHaveBeenCalled()
+    })
+
+})
+
+// ── log (renderer log relay) ────────────────────────────────────────────────────
+
+describe('WebBleFeature — log', () => {
+
+    test('forwards the event to the main-process logger', () => {
+        const feature = new WebBleFeature()
+        feature.logger.logEvent = jest.fn()
+
+        feature.log({ message: 'GATT connecting to', device: 'Volt' })
+
+        expect(feature.logger.logEvent).toHaveBeenCalledWith({ message: 'GATT connecting to', device: 'Volt' })
     })
 
 })
@@ -351,6 +484,49 @@ describe('WebBleFeature — _onSelectBluetoothDevice', () => {
         expect(cb1).toHaveBeenCalledWith('aa')
         expect(cb2).not.toHaveBeenCalled()
         expect(feature.pendingCallback).toBe(cb2)
+    })
+
+    test('scanning: skips a device that is in cooldown, approves the next candidate', () => {
+        feature.scanning = true
+        feature.probeCooldowns.set('aa', Date.now() + 60000)
+        const cb = jest.fn()
+        feature._onSelectBluetoothDevice(makeEvent(), makeDeviceList('aa', 'bb'), cb)
+        expect(cb).toHaveBeenCalledWith('bb')
+    })
+
+    test('scanning: an explicitly-requested device is approved even though it is in cooldown', () => {
+        feature.scanning = true
+        feature.probeCooldowns.set('aa', Date.now() + 60000)
+        feature.connectTargetMacs.add('aa')
+        const cb = jest.fn()
+        feature._onSelectBluetoothDevice(makeEvent(), makeDeviceList('aa', 'bb'), cb)
+        expect(cb).toHaveBeenCalledWith('aa')
+    })
+
+    test('scanning: a device blacklisted in the persisted cache is never approved, even as the only candidate', () => {
+        feature.scanning = true
+        feature.deviceCache.isBad.mockImplementation(id => id === 'aa')
+        const cb = jest.fn()
+        feature._onSelectBluetoothDevice(makeEvent(), makeDeviceList('aa'), cb)
+        expect(cb).not.toHaveBeenCalled()
+        expect(feature.pendingCallback).toBe(cb)
+    })
+
+    test('scanning: a device persisted as good wins over an earlier, unclassified device in the same list', () => {
+        feature.scanning = true
+        feature.deviceCache.isGood.mockImplementation(id => id === 'bb')
+        const cb = jest.fn()
+        // 'aa' appears first in the array but 'bb' is the known-good device
+        feature._onSelectBluetoothDevice(makeEvent(), makeDeviceList('aa', 'bb'), cb)
+        expect(cb).toHaveBeenCalledWith('bb')
+    })
+
+    test('scanning: falls back to a cooled-down device when nothing better is available (parked, not idle)', () => {
+        feature.scanning = true
+        feature.probeCooldowns.set('aa', Date.now() + 60000)
+        const cb = jest.fn()
+        feature._onSelectBluetoothDevice(makeEvent(), makeDeviceList('aa'), cb)
+        expect(cb).toHaveBeenCalledWith('aa')
     })
 
     test('scanning: approves second new device on subsequent event', () => {
@@ -535,7 +711,7 @@ describe('WebBleFeature — register', () => {
         expect(app.on).toHaveBeenCalledWith('web-contents-created', expect.any(Function))
     })
 
-    test('registers all four no-response IPC handlers', () => {
+    test('registers all no-response IPC handlers', () => {
         const feature = WebBleFeature.getInstance()
         feature.register({})
         const keys = ipcHandleNoResponse.mock.calls.map(c => c[0])
@@ -543,6 +719,10 @@ describe('WebBleFeature — register', () => {
         expect(keys).toContain('webble-stop-scan')
         expect(keys).toContain('webble-connect')
         expect(keys).toContain('webble-disconnect')
+        expect(keys).toContain('webble-probe-failed')
+        expect(keys).toContain('webble-connect-succeeded')
+        expect(keys).toContain('webble-unsupported-device')
+        expect(keys).toContain('webble-log')
     })
 
     test('registers webble-get-mac and webble-take-approved as sync handlers', () => {
@@ -649,6 +829,10 @@ describe('WebBleFeature — registerRenderer', () => {
         expect(typeof spec.webble.disconnect).toBe('function')
         expect(typeof spec.webble.getMac).toBe('function')
         expect(typeof spec.webble.takeApproved).toBe('function')
+        expect(typeof spec.webble.reportProbeFailed).toBe('function')
+        expect(typeof spec.webble.reportConnectSucceeded).toBe('function')
+        expect(typeof spec.webble.reportUnsupportedDevice).toBe('function')
+        expect(typeof spec.webble.log).toBe('function')
     })
 
     test('wires getMac and takeApproved via ipcCallSync', () => {
@@ -657,6 +841,16 @@ describe('WebBleFeature — registerRenderer', () => {
         const syncKeys = ipcCallSync.mock.calls.map(c => c[0])
         expect(syncKeys).toContain('webble-get-mac')
         expect(syncKeys).toContain('webble-take-approved')
+    })
+
+    test('wires reportProbeFailed, reportConnectSucceeded, reportUnsupportedDevice and log via ipcCallNoResponse', () => {
+        const feature = WebBleFeature.getInstance()
+        feature.registerRenderer(spec, ipcRenderer)
+        const keys = ipcCallNoResponse.mock.calls.map(c => c[0])
+        expect(keys).toContain('webble-probe-failed')
+        expect(keys).toContain('webble-connect-succeeded')
+        expect(keys).toContain('webble-unsupported-device')
+        expect(keys).toContain('webble-log')
     })
 
     test('announces webble capabilities', () => {

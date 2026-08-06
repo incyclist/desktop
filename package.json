@@ -2,7 +2,7 @@
   "name": "incyclist",
   "productName": "Incyclist",
   "desktopName": "Incyclist.desktop",
-  "version": "26.8.1",
+  "version": "26.8.2",
   "copyright": "Guido Doumen, Jeroen Doumen",
   "description": "Incyclist Desktop App",
   "main": "src/main.js",

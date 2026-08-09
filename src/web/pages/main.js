@@ -199,8 +199,14 @@ class MainWindow {
     }
 
     onClose(e) {
-        e.preventDefault()
-
+        // TEMPORARY DIAGNOSTIC (2026-08-09) - preventDefault() removed on purpose.
+        // Testing whether win.destroy() itself (further down the confirmExit()
+        // handshake this used to force) is what triggers the macOS BLE-binding
+        // deadlock, before app.js's quit() ever runs a single line. With
+        // preventDefault() gone, the native close() proceeds immediately, which does
+        // fire the renderer's beforeunload (unlike destroy()) but skips the
+        // "Disconnecting..." UX/onAppExit() teardown entirely - not the final fix,
+        // just isolating the hypothesis. Revert this once confirmed either way.
         this.send( 'app-event',{component:'app',closing:true })
     }
 

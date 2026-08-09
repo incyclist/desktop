@@ -23,13 +23,17 @@ describe('MainWindow', () => {
     }
 
     describe('onClose', () => {
-        it('prevents the default close and notifies the renderer via webContents.send', () => {
+        // TEMPORARY DIAGNOSTIC (2026-08-09): preventDefault() removed from onClose()
+        // to test whether win.destroy()/skipping beforeunload is the trigger for a
+        // macOS BLE-binding shutdown deadlock - see onClose()'s comment in main.js.
+        // Revert this assertion alongside that change once the hypothesis is confirmed.
+        it('notifies the renderer via webContents.send without preventing the default close', () => {
             const mw = createInstance();
             const event = { preventDefault: jest.fn() };
 
             mw.onClose(event);
 
-            expect(event.preventDefault).toHaveBeenCalled();
+            expect(event.preventDefault).not.toHaveBeenCalled();
             expect(mw.win.webContents.send).toHaveBeenCalledWith('app-event', {component:'app',closing:true});
         });
 

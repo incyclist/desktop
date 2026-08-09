@@ -424,9 +424,20 @@ class IncyclistApp
     }
 
     async onBeforeQuit(e) {
-        
+
         this.logger.logEvent({message:'app event',event:'before-quit'})
-        this.willQuit = true;        
+        this.willQuit = true;
+
+        // if our own quit() has already run (e.g. in-app Quit button, whose renderer
+        // teardown/handshake already completed before app.quit() was called), this
+        // before-quit is the one *we* triggered - let Electron's native quit sequence
+        // (which on macOS deregisters the app from the Dock) complete uninterrupted.
+        if (this.state.isQuitting)
+            return;
+
+        // otherwise this is an OS-level quit request (Cmd+Q, Dock "Quit", etc.) that
+        // bypassed our renderer teardown - prevent it so we can flush first, then
+        // re-trigger quitting through our own quit() method.
         e.preventDefault();
         try {
             await this.restAdapter?.flush();
@@ -436,11 +447,13 @@ class IncyclistApp
     }
 
     onWillQuit(e) {
-        
+
         this.logger.logEvent({message:'app event',event:'will-quit'})
-        e.preventDefault();
-        this.quit();
-            
+
+        // Do not preventDefault()/requit here: by the time will-quit fires, our own
+        // quit() has already run its flush/cleanup (either directly, or via
+        // onBeforeQuit re-triggering it), so this is Electron's native quit sequence
+        // completing - let it terminate the app normally.
     }
 
     async quit() {
@@ -451,7 +464,7 @@ class IncyclistApp
         this.logger.logEvent({message:'quitting app'})
 
         this.state.isQuitting=true;
-        setTimeout( ()=>{process.exit(); },2000)
+        setTimeout( ()=>{app.exit(); },2000)
 
         try {
             if ( process.env.DEBUG) this.logger.logEvent({message:'flushing adapters'})
@@ -469,7 +482,7 @@ class IncyclistApp
             app.quit();
 
             if ( process.env.DEBUG) this.logger.logEvent({message:'teminate process'})
-            process.exit();
+            app.exit();
 
         }
         catch(err) {

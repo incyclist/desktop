@@ -85,13 +85,10 @@ class IncyclistApp
         this.initBasicLogging();
     }
 
-    // Features register cleanup here (e.g. stopping ffmpeg conversions, releasing
-    // devices) instead of listening for the app's 'before-quit' event directly.
-    // 'before-quit' does not fire consistently across all quit paths - most notably,
-    // it never fires at all when quitting via the in-app Quit button on macOS (see
-    // quit()'s platform branch below) - so a hook run explicitly from quit() itself is
-    // the only way to guarantee cleanup runs the same way regardless of how quitting
-    // was triggered.
+    // Features register cleanup here (e.g. stopping ffmpeg conversions) instead of
+    // listening for the app's 'before-quit' event, which doesn't fire on every quit
+    // path (see quit()'s macOS branch below) and so can't be relied on for cleanup
+    // that must always run.
     registerQuitHook(fn) {
         this.quitHooks.push(fn)
     }
@@ -426,17 +423,8 @@ class IncyclistApp
 
         }
 
-        // Route through our own quit() instead of calling app.quit() directly. This
-        // event fires the instant the last window is destroyed - essentially the same
-        // tick as onClosed()->onAppQuit()->quit() below, and usually *before* it. A
-        // raw, unguarded app.quit() here bypassed quit()'s isQuitting guard and its
-        // watchdog entirely: since 'before-quit' no longer gets prevented once
-        // isQuitting is already true (see onBeforeQuit), this call would sail straight
-        // through to Electron's real native shutdown immediately - well before our 2s
-        // watchdog ever got a turn - which is the likely reason the watchdog never
-        // appeared to help even after the app.exit()->SIGKILL fix. quit()'s own guard
-        // makes this a safe no-op when a quit is already in progress, and gives this
-        // path the same watchdog protection when it isn't.
+        // Route through our own quit() rather than calling app.quit() directly, so
+        // this shares the same re-entrancy guard and watchdog as every other quit path.
         this.quit();
     }
 
@@ -462,16 +450,13 @@ class IncyclistApp
         this.logger.logEvent({message:'app event',event:'before-quit'})
         this.willQuit = true;
 
-        // if our own quit() has already run (e.g. in-app Quit button, whose renderer
-        // teardown/handshake already completed before app.quit() was called), this
-        // before-quit is the one *we* triggered - let Electron's native quit sequence
-        // (which on macOS deregisters the app from the Dock) complete uninterrupted.
+        // If our own quit() already started (e.g. via the in-app Quit button), this
+        // before-quit is the one we triggered ourselves - let it proceed uninterrupted.
         if (this.state.isQuitting)
             return;
 
-        // otherwise this is an OS-level quit request (Cmd+Q, Dock "Quit", etc.) that
-        // bypassed our renderer teardown - prevent it so we can flush first, then
-        // re-trigger quitting through our own quit() method.
+        // Otherwise this is an OS-level quit request (Cmd+Q, Dock "Quit") that bypassed
+        // our own teardown - prevent it, flush, then re-trigger via quit().
         e.preventDefault();
         try {
             await this.restAdapter?.flush();
@@ -498,20 +483,13 @@ class IncyclistApp
         this.logger.logEvent({message:'quitting app'})
 
         this.state.isQuitting=true;
-        // Watchdog: if app.quit() hasn't actually terminated the process within 2s,
-        // force it. On macOS this uses a raw SIGKILL rather than app.exit() - confirmed
-        // via a stack sample of a hung quit (2026-08-09) that Node's own environment
-        // cleanup (which both app.quit() and app.exit() funnel into on their way to
-        // actually exiting) can deadlock inside @stoprocent/noble's macOS BLE binding
-        // (NobleMac's destructor releasing a native ThreadSafeCallback while a
-        // CoreBluetooth operation is still in flight). No amount of choosing which JS
-        // exit function to call avoids this, since the deadlock is inside Node's own
-        // cleanup routine, downstream of all of them. A real SIGKILL is delivered by
-        // the kernel and can't be intercepted or deadlocked by any in-process code -
-        // it's exactly what a manual Dock "Force Quit" already does; this just
-        // automates it after a short grace period instead of requiring the user to do
-        // it by hand. Windows/Linux aren't known to hit this native deadlock, so they
-        // keep the existing, more graceful app.exit() fallback unchanged.
+        // Watchdog: force termination if quit() hasn't finished within 2s. On macOS
+        // this sends a real SIGKILL rather than calling app.exit() - a native BLE
+        // binding used elsewhere in the app can leave Node's own exit-cleanup routine
+        // deadlocked, which app.exit()/app.quit() both run through on their way out.
+        // SIGKILL is delivered by the kernel and can't be intercepted or deadlocked by
+        // any in-process code - the same thing a manual Dock "Force Quit" sends.
+        // Windows/Linux aren't affected, so they keep the app.exit() fallback.
         setTimeout( ()=>{
             if (process.platform==='darwin')
                 process.kill(process.pid,'SIGKILL')
@@ -534,24 +512,15 @@ class IncyclistApp
             if ( process.env.DEBUG) this.logger.logEvent({message:'running quit hooks'})
             await this.runQuitHooks();
 
-            // On macOS, never call app.quit()/app.exit() here - two consecutive stack
-            // samples of hung quits (2026-08-09) confirmed that once Electron's native
-            // shutdown sequence actually begins (with zero windows already open, as is
-            // the case here), it runs straight through to Node's own environment
-            // cleanup - and that reliably deadlocks inside @stoprocent/noble's macOS
-            // BLE binding destructor whenever BLE was recently active. Critically, this
-            // sequence does not yield back to the JS event loop once started, so even a
-            // watchdog timer armed well in advance (see above) never gets a turn to
-            // fire once app.quit()/app.exit() has been called and committed to
-            // shutting down - the call itself is what freezes the thread permanently.
-            // The only reliable fix is to never make that call at all here: go straight
-            // to a real SIGKILL, exactly what a manual Dock "Force Quit" already sends,
-            // which the kernel delivers directly and can't be deadlocked by any
-            // in-process code. 'before-quit' never fires on this path as a result -
-            // features needing before-quit-style cleanup (e.g. VideoScheme's ffmpeg
-            // stopAll()) must use registerQuitHook() above instead, which runs on every
-            // quit path uniformly rather than depending on a native event that some
-            // paths (this one) never actually emit.
+            // On macOS, never call app.quit()/app.exit() here - once Electron's native
+            // shutdown sequence begins (with zero windows already open, as is the case
+            // here), it runs straight through to Node's own exit-cleanup routine
+            // without yielding back to the JS event loop, and that routine can deadlock
+            // inside a native BLE binding if a BLE operation was still in flight. Going
+            // straight to a real SIGKILL avoids entering that sequence at all - the
+            // same thing a manual Dock "Force Quit" already sends. This also means
+            // 'before-quit' never fires here, so quit-time cleanup (e.g. VideoScheme's
+            // ffmpeg stopAll()) must use registerQuitHook() instead.
             if (process.platform==='darwin') {
                 if ( process.env.DEBUG) this.logger.logEvent({message:'SIGKILL (darwin)'})
                 process.kill(process.pid,'SIGKILL')

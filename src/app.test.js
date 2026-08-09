@@ -199,7 +199,7 @@ describe('IncyclistApp - quit sequence', () => {
                 expect(killSpy).not.toHaveBeenCalled()
             })
 
-            test('on macOS: never calls app.quit()/app.exit() - sends a real SIGKILL directly instead, since app.quit() itself is what triggers the confirmed native BLE-binding deadlock', async () => {
+            test('on macOS: never calls app.quit()/app.exit() - sends a real SIGKILL directly instead', async () => {
                 withPlatform('darwin')
 
                 await incyclistApp.quit()
@@ -233,7 +233,7 @@ describe('IncyclistApp - quit sequence', () => {
                 killSpy.mockRestore()
             })
 
-            test('on macOS: sends a real SIGKILL to itself, not app.exit() - works around a confirmed native BLE-binding deadlock in Node\'s own exit cleanup that both app.quit() and app.exit() funnel into', async () => {
+            test('on macOS: sends a real SIGKILL to itself, not app.exit()', async () => {
                 withPlatform('darwin')
 
                 incyclistApp.quit()

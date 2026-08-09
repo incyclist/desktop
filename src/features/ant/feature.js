@@ -147,17 +147,6 @@ class AntFeature extends Feature{
         ipcHandleSync('ant-freeChannel',this.freeChannelRequest.bind(this),ipcMain)
         ipcHandleSync('ant-getDeviceNumber',this.getDeviceNumberRequest.bind(this),ipcMain)
         ipcHandleNoResponse('ant-write',this.writeRequest.bind(this),ipcMain)
-
-        // NOT registering closeRequest() as a quit hook here (it was, briefly, during
-        // this fix's development). The renderer's beforeunload (mainPreload.js) already
-        // calls ant.close() once via IPC before quitting - MainWindow.confirmClose()
-        // (see feature.js's confirmExit()) now closes the window normally instead of
-        // destroying it, which is what makes that call actually fire again reliably.
-        // A second, redundant close() from a main-process quit hook risks the same
-        // class of bug real macOS testing (2026-08-09) found in the equivalent BLE
-        // quit hook (a crash from a native binding's teardown method being called a
-        // second time while still settling) - not proven to affect ant.close()
-        // specifically, but not worth the risk when the confirmed fix doesn't need it.
     }
 
     registerRenderer( spec, ipcRenderer) {

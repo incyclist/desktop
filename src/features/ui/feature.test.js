@@ -44,12 +44,7 @@ describe('NativeUISupport.confirmExit', () => {
         }
     })
 
-    // Was win.destroy() via getWindowManager().getActiveWindow() - confirmed via a real
-    // macOS repro that force-destroying the window skips the renderer's beforeunload
-    // (which releases native device handles), leaving a native BLE binding in a state
-    // that later deadlocks the whole process on exit. confirmClose() instead lets the
-    // window close normally, now that the renderer has confirmed via the handshake.
-    test('calls confirmClose() on the main window instead of destroying it directly', () => {
+    test('calls confirmClose() on the main window', () => {
         const mainWindow = { confirmClose: jest.fn() }
         app.incyclistApp.getMainWindow.mockReturnValue(mainWindow)
 

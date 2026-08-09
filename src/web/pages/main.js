@@ -200,18 +200,10 @@ class MainWindow {
     }
 
     onClose(e) {
-        // First attempt (this.confirmed still false): hold the close, ask the
-        // renderer to confirm first (MQTT session-end, device pause/cancel, shows
-        // "Disconnecting..."). confirmClose() below re-triggers close() once that's
-        // done, with this.confirmed already set - let that second attempt proceed
-        // through Electron's normal close sequence rather than force-destroying the
-        // window: close() (unlike destroy()) fires the renderer's beforeunload, which
-        // is what actually releases native device handles (see mainPreload.js's
-        // ant.close() call) before the process later tries to exit. Confirmed via a
-        // real macOS repro (2026-08-09): skipping that release by force-destroying the
-        // window instead left a native BLE binding in a state that deadlocked the
-        // whole process during Node's later exit cleanup, requiring a manual Force
-        // Quit from the Dock every time.
+        // On the first attempt, hold the close and ask the renderer to confirm first
+        // (device teardown, "Disconnecting..." UI). confirmClose() re-triggers close()
+        // once that's done, with this.confirmed already set - let that second attempt
+        // proceed normally instead of looping back here again.
         if (!this.confirmed) {
             e.preventDefault()
             this.send( 'app-event',{component:'app',closing:true })

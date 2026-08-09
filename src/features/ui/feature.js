@@ -82,13 +82,8 @@ class NativeUISupport extends Feature {
   }
 
   confirmExit() {
-    // Was win.destroy() - confirmed via real macOS repro (2026-08-09) that
-    // force-destroying the window instead of letting it close normally skips the
-    // renderer's beforeunload, which is what releases native device handles (ANT+,
-    // and indirectly what keeps the BLE binding from later deadlocking during
-    // process exit). MainWindow.confirmClose() re-triggers a normal close() now that
-    // the renderer has already confirmed via the app-event handshake, instead of
-    // force-destroying the window.
+    // confirmClose() closes the window normally (not destroy()), so the renderer's
+    // beforeunload still fires and releases native device handles before quitting.
     let mainWindow = app.incyclistApp.getMainWindow();
     mainWindow?.confirmClose()
 

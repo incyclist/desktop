@@ -437,33 +437,6 @@ class BLEFeature extends Feature {
             binding.resumeLogging()
     }
 
-    // Explicitly releases the native BLE manager (e.g. CoreBluetooth's
-    // CBCentralManager on macOS) instead of leaving it to be torn down implicitly by
-    // the Noble binding's destructor during Node's exit-time environment cleanup -
-    // originally added as a defense-in-depth quit hook, confirmed via stack sample
-    // (2026-08-09) that the latter can deadlock on macOS if a BLE operation was still
-    // in flight.
-    //
-    // NOT wired up as a quit hook (see register() below) - real macOS testing
-    // (2026-08-09) showed calling noble.stop() here instead caused a crash-on-exit
-    // (EXC_BAD_ACCESS/SIGSEGV inside a NobleMac instance method, use-after-free
-    // pattern) when a CoreBluetooth delegate callback from an in-flight BLE operation
-    // was still queued and fired after stop() released the manager. The confirmed fix
-    // for the original hang (restoring the renderer's beforeunload -> ant.close() via
-    // MainWindow.confirmClose(), see feature.js's confirmExit()) does not depend on
-    // this, so it's kept here unregistered rather than risking the same crash again.
-    close() {
-        if (!this.ble || typeof this.ble.stop !== 'function')
-            return;
-
-        try {
-            this.ble.stop()
-        }
-        catch(err) {
-            this.logger.logEvent({message:'error',fn:'BLEFeature.close()',error:err.message,stack:err.stack})
-        }
-    }
-
 
     on(event, callback) { 
         this.emitter.on(event, callback) 
@@ -498,9 +471,6 @@ class BLEFeature extends Feature {
             ipcHandleNoResponse('ble-setServerDebug',this.setServerDebug.bind(this),ipcMain)
             ipcHandleNoResponse('ble-pauseLogging',this.pauseLogging.bind(this),ipcMain)
             ipcHandleNoResponse('ble-resumeLogging',this.resumeLogging.bind(this),ipcMain)
-
-            // Deliberately NOT registering close() as a quit hook here - see close()'s
-            // comment above for why (crash-on-exit, confirmed via real macOS testing).
         }
     }
 

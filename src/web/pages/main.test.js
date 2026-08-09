@@ -35,10 +35,6 @@ describe('MainWindow', () => {
             expect(mw.win.webContents.send).toHaveBeenCalledWith('app-event', {component:'app',closing:true});
         });
 
-        // Once confirmClose() has run (e.g. via the in-app Quit button's handshake),
-        // this second attempt must be allowed through - not re-prevented - so the
-        // window's normal close() sequence (which fires beforeunload, releasing native
-        // device handles) can actually complete instead of looping forever.
         it('once confirmed: lets the close proceed without preventing it or re-notifying the renderer', () => {
             const mw = createInstance()
             mw.confirmed = true

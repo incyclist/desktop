@@ -705,10 +705,7 @@ class VideoScheme  extends Feature {
         ipcHandleObserver('video-convert-offline',this.convertToFile.bind(this),ipcMain )
         
         // we need to stop active sessions on app exit, otherwise the main process would still try to send events to the renderer process
-        // Registered as a quit hook (run explicitly from IncyclistApp.quit()) rather than
-        // listening for 'before-quit' directly: that event doesn't fire on every quit path
-        // (notably, never on macOS's in-app-Quit-button path - see app.js's quit()), so a
-        // hook that runs uniformly regardless of how quitting was triggered is required.
+        // Uses a quit hook rather than 'before-quit', which doesn't fire on every quit path.
         app.incyclistApp.registerQuitHook(() => this.stopAll());
 
         this.initFFMeg()

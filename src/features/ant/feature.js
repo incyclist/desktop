@@ -148,14 +148,16 @@ class AntFeature extends Feature{
         ipcHandleSync('ant-getDeviceNumber',this.getDeviceNumberRequest.bind(this),ipcMain)
         ipcHandleNoResponse('ant-write',this.writeRequest.bind(this),ipcMain)
 
-        // The renderer's beforeunload handler used to be the only thing that called
-        // ant.close() before quitting - but that only fires on a normal window
-        // close(), not the win.destroy() used by the app's confirm-exit quit handshake
-        // (see app.js's quit()), so it silently stopped running whenever quitting via
-        // that path. Registering it directly as a quit hook here makes the release
-        // unconditional, run from the main process, regardless of how quitting was
-        // triggered.
-        app.incyclistApp.registerQuitHook(() => this.closeRequest());
+        // NOT registering closeRequest() as a quit hook here (it was, briefly, during
+        // this fix's development). The renderer's beforeunload (mainPreload.js) already
+        // calls ant.close() once via IPC before quitting - MainWindow.confirmClose()
+        // (see feature.js's confirmExit()) now closes the window normally instead of
+        // destroying it, which is what makes that call actually fire again reliably.
+        // A second, redundant close() from a main-process quit hook risks the same
+        // class of bug real macOS testing (2026-08-09) found in the equivalent BLE
+        // quit hook (a crash from a native binding's teardown method being called a
+        // second time while still settling) - not proven to affect ant.close()
+        // specifically, but not worth the risk when the confirmed fix doesn't need it.
     }
 
     registerRenderer( spec, ipcRenderer) {

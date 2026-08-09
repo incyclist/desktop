@@ -82,15 +82,15 @@ class NativeUISupport extends Feature {
   }
 
   confirmExit() {
-    let win = app.incyclistApp.getWindowManager().getActiveWindow();
-    // TEMPORARY DIAGNOSTIC (2026-08-09) - win.destroy() replaced with win.close().
-    // This is the actual path the in-app Quit button exercises. Testing whether
-    // destroy() itself (skipping the renderer's beforeunload) is what triggers the
-    // macOS BLE-binding deadlock, before app.js's quit() ever runs. close() fires
-    // beforeunload -> ant.close() naturally, same as pre-4316cf4 behaviour, at the
-    // cost of the "Disconnecting..." UX being skipped for this test. Revert once
-    // confirmed either way - this is not the final fix.
-    win?.close()
+    // Was win.destroy() - confirmed via real macOS repro (2026-08-09) that
+    // force-destroying the window instead of letting it close normally skips the
+    // renderer's beforeunload, which is what releases native device handles (ANT+,
+    // and indirectly what keeps the BLE binding from later deadlocking during
+    // process exit). MainWindow.confirmClose() re-triggers a normal close() now that
+    // the renderer has already confirmed via the app-event handshake, instead of
+    // force-destroying the window.
+    let mainWindow = app.incyclistApp.getMainWindow();
+    mainWindow?.confirmClose()
 
   }
 

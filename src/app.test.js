@@ -34,6 +34,7 @@ describe('IncyclistApp - quit sequence', () => {
         incyclistApp.state = { isQuitting: false }
         incyclistApp.restAdapter = { flush: jest.fn().mockResolvedValue() }
         incyclistApp.enableScreensaver = jest.fn()
+        incyclistApp.quitHooks = []
     })
 
     afterEach(() => {
@@ -124,6 +125,30 @@ describe('IncyclistApp - quit sequence', () => {
         })
     })
 
+    describe('registerQuitHook / runQuitHooks', () => {
+
+        test('runs registered hooks in order and awaits them', async () => {
+            const order = []
+            incyclistApp.registerQuitHook(async () => { await Promise.resolve(); order.push('first') })
+            incyclistApp.registerQuitHook(() => { order.push('second') })
+
+            await incyclistApp.runQuitHooks()
+
+            expect(order).toEqual(['first', 'second'])
+        })
+
+        test('logs and continues if a hook throws, without skipping later hooks', async () => {
+            const later = jest.fn()
+            incyclistApp.registerQuitHook(() => { throw new Error('boom') })
+            incyclistApp.registerQuitHook(later)
+
+            await expect(incyclistApp.runQuitHooks()).resolves.not.toThrow()
+
+            expect(later).toHaveBeenCalled()
+            expect(logger.logEvent).toHaveBeenCalledWith(expect.objectContaining({message:'quit hook error'}))
+        })
+    })
+
     describe('quit', () => {
 
         test('is a no-op on re-entry when isQuitting is already true', async () => {
@@ -133,6 +158,15 @@ describe('IncyclistApp - quit sequence', () => {
 
             expect(app.quit).not.toHaveBeenCalled()
             expect(app.exit).not.toHaveBeenCalled()
+        })
+
+        test('runs registered quit hooks before terminating', async () => {
+            const hook = jest.fn()
+            incyclistApp.registerQuitHook(hook)
+
+            await incyclistApp.quit()
+
+            expect(hook).toHaveBeenCalled()
         })
 
         describe('termination step (after flush/shortcuts/screensaver cleanup)', () => {

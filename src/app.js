@@ -79,10 +79,32 @@ class IncyclistApp
         this.session = gnerateUUID();
         this.settings = {}
         this.powerSaveBlockerID = undefined;
-        
+        this.quitHooks = []
 
         this.windowManager = new WindowManager(this)
-        this.initBasicLogging();       
+        this.initBasicLogging();
+    }
+
+    // Features register cleanup here (e.g. stopping ffmpeg conversions, releasing
+    // devices) instead of listening for the app's 'before-quit' event directly.
+    // 'before-quit' does not fire consistently across all quit paths - most notably,
+    // it never fires at all when quitting via the in-app Quit button on macOS (see
+    // quit()'s platform branch below) - so a hook run explicitly from quit() itself is
+    // the only way to guarantee cleanup runs the same way regardless of how quitting
+    // was triggered.
+    registerQuitHook(fn) {
+        this.quitHooks.push(fn)
+    }
+
+    async runQuitHooks() {
+        for (const hook of this.quitHooks) {
+            try {
+                await hook()
+            }
+            catch(err) {
+                this.logger.logEvent({message:'quit hook error',error:err.message,stack:err.stack})
+            }
+        }
     }
 
     checkSingleInstance() {
@@ -509,6 +531,9 @@ class IncyclistApp
             if ( process.env.DEBUG) this.logger.logEvent({message:'re-enabling screensaver'})
             this.enableScreensaver();
 
+            if ( process.env.DEBUG) this.logger.logEvent({message:'running quit hooks'})
+            await this.runQuitHooks();
+
             // On macOS, never call app.quit()/app.exit() here - two consecutive stack
             // samples of hung quits (2026-08-09) confirmed that once Electron's native
             // shutdown sequence actually begins (with zero windows already open, as is
@@ -522,10 +547,11 @@ class IncyclistApp
             // The only reliable fix is to never make that call at all here: go straight
             // to a real SIGKILL, exactly what a manual Dock "Force Quit" already sends,
             // which the kernel delivers directly and can't be deadlocked by any
-            // in-process code. This does mean 'before-quit' never fires on this path,
-            // so before-quit-only cleanup (e.g. VideoScheme's ffmpeg stopAll()) is
-            // skipped here - an accepted trade-off given the alternative is the app
-            // never closing at all.
+            // in-process code. 'before-quit' never fires on this path as a result -
+            // features needing before-quit-style cleanup (e.g. VideoScheme's ffmpeg
+            // stopAll()) must use registerQuitHook() above instead, which runs on every
+            // quit path uniformly rather than depending on a native event that some
+            // paths (this one) never actually emit.
             if (process.platform==='darwin') {
                 if ( process.env.DEBUG) this.logger.logEvent({message:'SIGKILL (darwin)'})
                 process.kill(process.pid,'SIGKILL')

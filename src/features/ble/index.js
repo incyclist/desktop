@@ -6,7 +6,7 @@ const os = require('node:os');
 const { getAppDirectory } = require("../../utils");
 const { EventLogger } = require('gd-eventlog');
 const EventEmitter = require("node:events");
-const { ipcMain } = require("electron");
+const { ipcMain, app } = require("electron");
 const Peripheral = require("@stoprocent/noble/lib/peripheral");
 const Characteristic = require("@stoprocent/noble/lib/characteristic");
 const Service = require("@stoprocent/noble/lib/service");
@@ -437,6 +437,24 @@ class BLEFeature extends Feature {
             binding.resumeLogging()
     }
 
+    // Explicitly releases the native BLE manager (e.g. CoreBluetooth's
+    // CBCentralManager on macOS) while the process is still healthy, instead of
+    // leaving it to be torn down implicitly by the Noble binding's destructor during
+    // Node's exit-time environment cleanup - confirmed via stack sample (2026-08-09)
+    // that the latter can deadlock on macOS if a BLE operation was still in flight.
+    // Registered as a quit hook (see register() below) so it runs on every quit path.
+    close() {
+        if (!this.ble || typeof this.ble.stop !== 'function')
+            return;
+
+        try {
+            this.ble.stop()
+        }
+        catch(err) {
+            this.logger.logEvent({message:'error',fn:'BLEFeature.close()',error:err.message,stack:err.stack})
+        }
+    }
+
 
     on(event, callback) { 
         this.emitter.on(event, callback) 
@@ -471,6 +489,8 @@ class BLEFeature extends Feature {
             ipcHandleNoResponse('ble-setServerDebug',this.setServerDebug.bind(this),ipcMain)
             ipcHandleNoResponse('ble-pauseLogging',this.pauseLogging.bind(this),ipcMain)
             ipcHandleNoResponse('ble-resumeLogging',this.resumeLogging.bind(this),ipcMain)
+
+            app.incyclistApp.registerQuitHook(() => ble.close());
         }
     }
 

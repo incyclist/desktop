@@ -13,7 +13,9 @@ describe('MainWindow', () => {
         const instance = Object.create(MainWindow.prototype);
         instance.logger = { logEvent: jest.fn() };
         instance.app = { onAppQuit: jest.fn() };
+        instance.confirmed = false;
         instance.win = {
+            close: jest.fn(),
             webContents: {
                 send: jest.fn(),
                 isDestroyed: () => false
@@ -23,18 +25,29 @@ describe('MainWindow', () => {
     }
 
     describe('onClose', () => {
-        // TEMPORARY DIAGNOSTIC (2026-08-09): preventDefault() removed from onClose()
-        // to test whether win.destroy()/skipping beforeunload is the trigger for a
-        // macOS BLE-binding shutdown deadlock - see onClose()'s comment in main.js.
-        // Revert this assertion alongside that change once the hypothesis is confirmed.
-        it('notifies the renderer via webContents.send without preventing the default close', () => {
+        it('on the first attempt (not yet confirmed): prevents the default close and notifies the renderer', () => {
             const mw = createInstance();
             const event = { preventDefault: jest.fn() };
 
             mw.onClose(event);
 
-            expect(event.preventDefault).not.toHaveBeenCalled();
+            expect(event.preventDefault).toHaveBeenCalled();
             expect(mw.win.webContents.send).toHaveBeenCalledWith('app-event', {component:'app',closing:true});
+        });
+
+        // Once confirmClose() has run (e.g. via the in-app Quit button's handshake),
+        // this second attempt must be allowed through - not re-prevented - so the
+        // window's normal close() sequence (which fires beforeunload, releasing native
+        // device handles) can actually complete instead of looping forever.
+        it('once confirmed: lets the close proceed without preventing it or re-notifying the renderer', () => {
+            const mw = createInstance()
+            mw.confirmed = true
+            const event = { preventDefault: jest.fn() };
+
+            mw.onClose(event);
+
+            expect(event.preventDefault).not.toHaveBeenCalled();
+            expect(mw.win.webContents.send).not.toHaveBeenCalled();
         });
 
         it('does not throw even if win has no top-level send method', () => {
@@ -43,6 +56,17 @@ describe('MainWindow', () => {
 
             const event = { preventDefault: jest.fn() };
             expect(() => mw.onClose(event)).not.toThrow();
+        });
+    });
+
+    describe('confirmClose', () => {
+        it('marks the window as confirmed and calls the normal close() (not destroy())', () => {
+            const mw = createInstance();
+
+            mw.confirmClose();
+
+            expect(mw.confirmed).toBe(true);
+            expect(mw.win.close).toHaveBeenCalled();
         });
     });
 

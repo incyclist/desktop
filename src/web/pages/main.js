@@ -27,6 +27,7 @@ class MainWindow {
 
         this.iconUrl = path.join(getSourceDir() ,"./public/favicon.ico");
         this.preloadUrl = path.join(getSourceDir() ,"./web/mainPreload.js");
+        this.confirmed = false;
 
         this.logger = new EventLogger('MainWin')
         this.logger.set({'event-type':'lifecycle'})
@@ -199,17 +200,28 @@ class MainWindow {
     }
 
     onClose(e) {
-        // TEMPORARY DIAGNOSTIC (2026-08-09) - preventDefault() removed on purpose.
-        // Testing whether win.destroy() itself (further down the confirmExit()
-        // handshake this used to force) is what triggers the macOS BLE-binding
-        // deadlock, before app.js's quit() ever runs a single line. With
-        // preventDefault() gone, the native close() proceeds immediately, which does
-        // fire the renderer's beforeunload (unlike destroy()) but skips the
-        // "Disconnecting..." UX/onAppExit() teardown entirely - not the final fix,
-        // just isolating the hypothesis. Revert this once confirmed either way.
-        this.send( 'app-event',{component:'app',closing:true })
+        // First attempt (this.confirmed still false): hold the close, ask the
+        // renderer to confirm first (MQTT session-end, device pause/cancel, shows
+        // "Disconnecting..."). confirmClose() below re-triggers close() once that's
+        // done, with this.confirmed already set - let that second attempt proceed
+        // through Electron's normal close sequence rather than force-destroying the
+        // window: close() (unlike destroy()) fires the renderer's beforeunload, which
+        // is what actually releases native device handles (see mainPreload.js's
+        // ant.close() call) before the process later tries to exit. Confirmed via a
+        // real macOS repro (2026-08-09): skipping that release by force-destroying the
+        // window instead left a native BLE binding in a state that deadlocked the
+        // whole process during Node's later exit cleanup, requiring a manual Force
+        // Quit from the Dock every time.
+        if (!this.confirmed) {
+            e.preventDefault()
+            this.send( 'app-event',{component:'app',closing:true })
+        }
     }
 
+    confirmClose() {
+        this.confirmed = true;
+        this.win?.close()
+    }
 
 }
 

@@ -401,9 +401,21 @@ class IncyclistApp
         if (this.windowManager.hasMainWindow()){
             this.windowManager.closeMainWindow()
             this.enableScreensaver();
-            
+
         }
-        app.quit();
+
+        // Route through our own quit() instead of calling app.quit() directly. This
+        // event fires the instant the last window is destroyed - essentially the same
+        // tick as onClosed()->onAppQuit()->quit() below, and usually *before* it. A
+        // raw, unguarded app.quit() here bypassed quit()'s isQuitting guard and its
+        // watchdog entirely: since 'before-quit' no longer gets prevented once
+        // isQuitting is already true (see onBeforeQuit), this call would sail straight
+        // through to Electron's real native shutdown immediately - well before our 2s
+        // watchdog ever got a turn - which is the likely reason the watchdog never
+        // appeared to help even after the app.exit()->SIGKILL fix. quit()'s own guard
+        // makes this a safe no-op when a quit is already in progress, and gives this
+        // path the same watchdog protection when it isn't.
+        this.quit();
     }
 
 
@@ -464,7 +476,26 @@ class IncyclistApp
         this.logger.logEvent({message:'quitting app'})
 
         this.state.isQuitting=true;
-        setTimeout( ()=>{app.exit(); },2000)
+        // Watchdog: if app.quit() hasn't actually terminated the process within 2s,
+        // force it. On macOS this uses a raw SIGKILL rather than app.exit() - confirmed
+        // via a stack sample of a hung quit (2026-08-09) that Node's own environment
+        // cleanup (which both app.quit() and app.exit() funnel into on their way to
+        // actually exiting) can deadlock inside @stoprocent/noble's macOS BLE binding
+        // (NobleMac's destructor releasing a native ThreadSafeCallback while a
+        // CoreBluetooth operation is still in flight). No amount of choosing which JS
+        // exit function to call avoids this, since the deadlock is inside Node's own
+        // cleanup routine, downstream of all of them. A real SIGKILL is delivered by
+        // the kernel and can't be intercepted or deadlocked by any in-process code -
+        // it's exactly what a manual Dock "Force Quit" already does; this just
+        // automates it after a short grace period instead of requiring the user to do
+        // it by hand. Windows/Linux aren't known to hit this native deadlock, so they
+        // keep the existing, more graceful app.exit() fallback unchanged.
+        setTimeout( ()=>{
+            if (process.platform==='darwin')
+                process.kill(process.pid,'SIGKILL')
+            else
+                app.exit()
+        },2000)
 
         try {
             if ( process.env.DEBUG) this.logger.logEvent({message:'flushing adapters'})

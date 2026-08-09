@@ -75,6 +75,42 @@ describe('IncyclistApp - quit sequence', () => {
         })
     })
 
+    describe('onWindowAllClosed', () => {
+
+        beforeEach(() => {
+            incyclistApp.windowManager = { hasMainWindow: jest.fn(() => false), closeMainWindow: jest.fn() }
+        })
+
+        test('routes through quit() instead of calling app.quit() directly', () => {
+            incyclistApp.quit = jest.fn()
+
+            incyclistApp.onWindowAllClosed()
+
+            expect(incyclistApp.quit).toHaveBeenCalled()
+            expect(app.quit).not.toHaveBeenCalled()
+        })
+
+        test('is a safe no-op when a quit is already in progress (does not bypass the watchdog-protected quit())', async () => {
+            incyclistApp.state.isQuitting = true
+
+            incyclistApp.onWindowAllClosed()
+            await Promise.resolve()
+
+            // real quit() runs, but its own re-entrancy guard makes it a no-op
+            expect(app.quit).not.toHaveBeenCalled()
+        })
+
+        test('closes the main window and re-enables the screensaver if still present', () => {
+            incyclistApp.windowManager.hasMainWindow = jest.fn(() => true)
+            incyclistApp.quit = jest.fn()
+
+            incyclistApp.onWindowAllClosed()
+
+            expect(incyclistApp.windowManager.closeMainWindow).toHaveBeenCalled()
+            expect(incyclistApp.enableScreensaver).toHaveBeenCalled()
+        })
+    })
+
     describe('onWillQuit', () => {
 
         test('does not prevent default and does not call quit() again', () => {
@@ -113,22 +149,46 @@ describe('IncyclistApp - quit sequence', () => {
             expect(app.exit).not.toHaveBeenCalled()
         })
 
-        test('watchdog calls app.exit() (not process.exit()) if quit hangs', async () => {
-            const processExitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {})
+        describe('watchdog (fires if quit hangs)', () => {
 
-            // make the flush hang forever so the try-block never reaches app.quit()/app.exit()
-            incyclistApp.restAdapter.flush = jest.fn(() => new Promise(() => {}))
+            const withPlatform = (platform) => Object.defineProperty(process, 'platform', { value: platform })
 
-            incyclistApp.quit()
-            // allow the quit() async function to start and register the watchdog timer
-            await Promise.resolve()
+            let originalPlatform
+            let killSpy
 
-            jest.advanceTimersByTime(2000)
+            beforeEach(() => {
+                originalPlatform = process.platform
+                killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {})
+                // make the flush hang forever so the try-block never reaches app.quit()
+                incyclistApp.restAdapter.flush = jest.fn(() => new Promise(() => {}))
+            })
 
-            expect(app.exit).toHaveBeenCalled()
-            expect(processExitSpy).not.toHaveBeenCalled()
+            afterEach(() => {
+                withPlatform(originalPlatform)
+                killSpy.mockRestore()
+            })
 
-            processExitSpy.mockRestore()
+            test('on macOS: sends a real SIGKILL to itself, not app.exit() - works around a confirmed native BLE-binding deadlock in Node\'s own exit cleanup that both app.quit() and app.exit() funnel into', async () => {
+                withPlatform('darwin')
+
+                incyclistApp.quit()
+                await Promise.resolve()
+                jest.advanceTimersByTime(2000)
+
+                expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGKILL')
+                expect(app.exit).not.toHaveBeenCalled()
+            })
+
+            test('on other platforms: still uses app.exit(), not SIGKILL - this deadlock is not known to occur there', async () => {
+                withPlatform('win32')
+
+                incyclistApp.quit()
+                await Promise.resolve()
+                jest.advanceTimersByTime(2000)
+
+                expect(app.exit).toHaveBeenCalled()
+                expect(killSpy).not.toHaveBeenCalled()
+            })
         })
     })
 })

@@ -135,18 +135,49 @@ describe('IncyclistApp - quit sequence', () => {
             expect(app.exit).not.toHaveBeenCalled()
         })
 
-        test('flushes, unregisters shortcuts, re-enables screensaver, and calls app.quit() - without forcing an immediate app.exit()', async () => {
-            await incyclistApp.quit()
+        describe('termination step (after flush/shortcuts/screensaver cleanup)', () => {
 
-            expect(incyclistApp.state.isQuitting).toBe(true)
-            expect(incyclistApp.restAdapter.flush).toHaveBeenCalled()
-            expect(globalShortcut.unregisterAll).toHaveBeenCalled()
-            expect(incyclistApp.enableScreensaver).toHaveBeenCalled()
-            expect(app.quit).toHaveBeenCalled()
-            // app.exit() must NOT be called right after app.quit() - doing so races/cuts off
-            // app.quit()'s own graceful native termination (the macOS Dock-deregistration bug
-            // this fix addresses). Only the watchdog timer (tested below) may force-exit.
-            expect(app.exit).not.toHaveBeenCalled()
+            const withPlatform = (platform) => Object.defineProperty(process, 'platform', { value: platform })
+
+            let originalPlatform
+            let killSpy
+
+            beforeEach(() => {
+                originalPlatform = process.platform
+                killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {})
+            })
+
+            afterEach(() => {
+                withPlatform(originalPlatform)
+                killSpy.mockRestore()
+            })
+
+            test('on non-macOS: flushes, unregisters shortcuts, re-enables screensaver, and calls app.quit()', async () => {
+                withPlatform('win32')
+
+                await incyclistApp.quit()
+
+                expect(incyclistApp.state.isQuitting).toBe(true)
+                expect(incyclistApp.restAdapter.flush).toHaveBeenCalled()
+                expect(globalShortcut.unregisterAll).toHaveBeenCalled()
+                expect(incyclistApp.enableScreensaver).toHaveBeenCalled()
+                expect(app.quit).toHaveBeenCalled()
+                expect(killSpy).not.toHaveBeenCalled()
+            })
+
+            test('on macOS: never calls app.quit()/app.exit() - sends a real SIGKILL directly instead, since app.quit() itself is what triggers the confirmed native BLE-binding deadlock', async () => {
+                withPlatform('darwin')
+
+                await incyclistApp.quit()
+
+                expect(incyclistApp.state.isQuitting).toBe(true)
+                expect(incyclistApp.restAdapter.flush).toHaveBeenCalled()
+                expect(globalShortcut.unregisterAll).toHaveBeenCalled()
+                expect(incyclistApp.enableScreensaver).toHaveBeenCalled()
+                expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGKILL')
+                expect(app.quit).not.toHaveBeenCalled()
+                expect(app.exit).not.toHaveBeenCalled()
+            })
         })
 
         describe('watchdog (fires if quit hangs)', () => {

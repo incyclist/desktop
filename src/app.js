@@ -509,15 +509,31 @@ class IncyclistApp
             if ( process.env.DEBUG) this.logger.logEvent({message:'re-enabling screensaver'})
             this.enableScreensaver();
 
-            // Let app.quit() drive termination on its own - by this point nothing
-            // prevents it (see onBeforeQuit/onWillQuit above), so it will actually
-            // terminate the app once it finishes closing windows and firing
-            // 'will-quit'/'quit'. Forcing an immediate app.exit() right here raced
-            // that graceful native shutdown (on macOS, cutting off the Dock
-            // deregistration before it completed) - the 2s watchdog above is now the
-            // only forced-exit path, for the case app.quit() itself hangs.
-            if ( process.env.DEBUG) this.logger.logEvent({message:'app.quit'})
-            app.quit();
+            // On macOS, never call app.quit()/app.exit() here - two consecutive stack
+            // samples of hung quits (2026-08-09) confirmed that once Electron's native
+            // shutdown sequence actually begins (with zero windows already open, as is
+            // the case here), it runs straight through to Node's own environment
+            // cleanup - and that reliably deadlocks inside @stoprocent/noble's macOS
+            // BLE binding destructor whenever BLE was recently active. Critically, this
+            // sequence does not yield back to the JS event loop once started, so even a
+            // watchdog timer armed well in advance (see above) never gets a turn to
+            // fire once app.quit()/app.exit() has been called and committed to
+            // shutting down - the call itself is what freezes the thread permanently.
+            // The only reliable fix is to never make that call at all here: go straight
+            // to a real SIGKILL, exactly what a manual Dock "Force Quit" already sends,
+            // which the kernel delivers directly and can't be deadlocked by any
+            // in-process code. This does mean 'before-quit' never fires on this path,
+            // so before-quit-only cleanup (e.g. VideoScheme's ffmpeg stopAll()) is
+            // skipped here - an accepted trade-off given the alternative is the app
+            // never closing at all.
+            if (process.platform==='darwin') {
+                if ( process.env.DEBUG) this.logger.logEvent({message:'SIGKILL (darwin)'})
+                process.kill(process.pid,'SIGKILL')
+            }
+            else {
+                if ( process.env.DEBUG) this.logger.logEvent({message:'app.quit'})
+                app.quit();
+            }
 
         }
         catch(err) {

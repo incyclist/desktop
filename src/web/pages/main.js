@@ -27,6 +27,7 @@ class MainWindow {
 
         this.iconUrl = path.join(getSourceDir() ,"./public/favicon.ico");
         this.preloadUrl = path.join(getSourceDir() ,"./web/mainPreload.js");
+        this.confirmed = false;
 
         this.logger = new EventLogger('MainWin')
         this.logger.set({'event-type':'lifecycle'})
@@ -199,11 +200,20 @@ class MainWindow {
     }
 
     onClose(e) {
-        e.preventDefault()
-
-        this.send( 'app-event',{component:'app',closing:true })
+        // On the first attempt, hold the close and ask the renderer to confirm first
+        // (device teardown, "Disconnecting..." UI). confirmClose() re-triggers close()
+        // once that's done, with this.confirmed already set - let that second attempt
+        // proceed normally instead of looping back here again.
+        if (!this.confirmed) {
+            e.preventDefault()
+            this.send( 'app-event',{component:'app',closing:true })
+        }
     }
 
+    confirmClose() {
+        this.confirmed = true;
+        this.win?.close()
+    }
 
 }
 

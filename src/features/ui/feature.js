@@ -82,8 +82,10 @@ class NativeUISupport extends Feature {
   }
 
   confirmExit() {
-    let win = app.incyclistApp.getWindowManager().getActiveWindow();
-    win?.destroy()
+    // confirmClose() closes the window normally (not destroy()), so the renderer's
+    // beforeunload still fires and releases native device handles before quitting.
+    let mainWindow = app.incyclistApp.getMainWindow();
+    mainWindow?.confirmClose()
 
   }
 

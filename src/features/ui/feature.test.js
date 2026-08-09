@@ -32,3 +32,31 @@ describe('NativeUISupport.quitRequest', () => {
     })
 
 })
+
+describe('NativeUISupport.confirmExit', () => {
+
+    let instance
+
+    beforeEach(() => {
+        instance = NativeUISupport.getInstance()
+        app.incyclistApp = {
+            getMainWindow: jest.fn()
+        }
+    })
+
+    test('calls confirmClose() on the main window', () => {
+        const mainWindow = { confirmClose: jest.fn() }
+        app.incyclistApp.getMainWindow.mockReturnValue(mainWindow)
+
+        instance.confirmExit()
+
+        expect(mainWindow.confirmClose).toHaveBeenCalled()
+    })
+
+    test('does not throw when there is no main window', () => {
+        app.incyclistApp.getMainWindow.mockReturnValue(undefined)
+
+        expect(() => instance.confirmExit()).not.toThrow()
+    })
+
+})

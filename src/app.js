@@ -79,10 +79,29 @@ class IncyclistApp
         this.session = gnerateUUID();
         this.settings = {}
         this.powerSaveBlockerID = undefined;
-        
+        this.quitHooks = []
 
         this.windowManager = new WindowManager(this)
-        this.initBasicLogging();       
+        this.initBasicLogging();
+    }
+
+    // Features register cleanup here (e.g. stopping ffmpeg conversions) instead of
+    // listening for the app's 'before-quit' event, which doesn't fire on every quit
+    // path (see quit()'s macOS branch below) and so can't be relied on for cleanup
+    // that must always run.
+    registerQuitHook(fn) {
+        this.quitHooks.push(fn)
+    }
+
+    async runQuitHooks() {
+        for (const hook of this.quitHooks) {
+            try {
+                await hook()
+            }
+            catch(err) {
+                this.logger.logEvent({message:'quit hook error',error:err.message,stack:err.stack})
+            }
+        }
     }
 
     checkSingleInstance() {
@@ -401,9 +420,12 @@ class IncyclistApp
         if (this.windowManager.hasMainWindow()){
             this.windowManager.closeMainWindow()
             this.enableScreensaver();
-            
+
         }
-        app.quit();
+
+        // Route through our own quit() rather than calling app.quit() directly, so
+        // this shares the same re-entrancy guard and watchdog as every other quit path.
+        this.quit();
     }
 
 
@@ -424,9 +446,17 @@ class IncyclistApp
     }
 
     async onBeforeQuit(e) {
-        
+
         this.logger.logEvent({message:'app event',event:'before-quit'})
-        this.willQuit = true;        
+        this.willQuit = true;
+
+        // If our own quit() already started (e.g. via the in-app Quit button), this
+        // before-quit is the one we triggered ourselves - let it proceed uninterrupted.
+        if (this.state.isQuitting)
+            return;
+
+        // Otherwise this is an OS-level quit request (Cmd+Q, Dock "Quit") that bypassed
+        // our own teardown - prevent it, flush, then re-trigger via quit().
         e.preventDefault();
         try {
             await this.restAdapter?.flush();
@@ -436,11 +466,13 @@ class IncyclistApp
     }
 
     onWillQuit(e) {
-        
+
         this.logger.logEvent({message:'app event',event:'will-quit'})
-        e.preventDefault();
-        this.quit();
-            
+
+        // Do not preventDefault()/requit here: by the time will-quit fires, our own
+        // quit() has already run its flush/cleanup (either directly, or via
+        // onBeforeQuit re-triggering it), so this is Electron's native quit sequence
+        // completing - let it terminate the app normally.
     }
 
     async quit() {
@@ -451,7 +483,19 @@ class IncyclistApp
         this.logger.logEvent({message:'quitting app'})
 
         this.state.isQuitting=true;
-        setTimeout( ()=>{process.exit(); },2000)
+        // Watchdog: force termination if quit() hasn't finished within 2s. On macOS
+        // this sends a real SIGKILL rather than calling app.exit() - a native BLE
+        // binding used elsewhere in the app can leave Node's own exit-cleanup routine
+        // deadlocked, which app.exit()/app.quit() both run through on their way out.
+        // SIGKILL is delivered by the kernel and can't be intercepted or deadlocked by
+        // any in-process code - the same thing a manual Dock "Force Quit" sends.
+        // Windows/Linux aren't affected, so they keep the app.exit() fallback.
+        setTimeout( ()=>{
+            if (process.platform==='darwin')
+                process.kill(process.pid,'SIGKILL')
+            else
+                app.exit()
+        },2000)
 
         try {
             if ( process.env.DEBUG) this.logger.logEvent({message:'flushing adapters'})
@@ -465,11 +509,26 @@ class IncyclistApp
             if ( process.env.DEBUG) this.logger.logEvent({message:'re-enabling screensaver'})
             this.enableScreensaver();
 
-            if ( process.env.DEBUG) this.logger.logEvent({message:'app.quit'})
-            app.quit();
+            if ( process.env.DEBUG) this.logger.logEvent({message:'running quit hooks'})
+            await this.runQuitHooks();
 
-            if ( process.env.DEBUG) this.logger.logEvent({message:'teminate process'})
-            process.exit();
+            // On macOS, never call app.quit()/app.exit() here - once Electron's native
+            // shutdown sequence begins (with zero windows already open, as is the case
+            // here), it runs straight through to Node's own exit-cleanup routine
+            // without yielding back to the JS event loop, and that routine can deadlock
+            // inside a native BLE binding if a BLE operation was still in flight. Going
+            // straight to a real SIGKILL avoids entering that sequence at all - the
+            // same thing a manual Dock "Force Quit" already sends. This also means
+            // 'before-quit' never fires here, so quit-time cleanup (e.g. VideoScheme's
+            // ffmpeg stopAll()) must use registerQuitHook() instead.
+            if (process.platform==='darwin') {
+                if ( process.env.DEBUG) this.logger.logEvent({message:'SIGKILL (darwin)'})
+                process.kill(process.pid,'SIGKILL')
+            }
+            else {
+                if ( process.env.DEBUG) this.logger.logEvent({message:'app.quit'})
+                app.quit();
+            }
 
         }
         catch(err) {

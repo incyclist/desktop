@@ -13,7 +13,9 @@ describe('MainWindow', () => {
         const instance = Object.create(MainWindow.prototype);
         instance.logger = { logEvent: jest.fn() };
         instance.app = { onAppQuit: jest.fn() };
+        instance.confirmed = false;
         instance.win = {
+            close: jest.fn(),
             webContents: {
                 send: jest.fn(),
                 isDestroyed: () => false
@@ -23,7 +25,7 @@ describe('MainWindow', () => {
     }
 
     describe('onClose', () => {
-        it('prevents the default close and notifies the renderer via webContents.send', () => {
+        it('on the first attempt (not yet confirmed): prevents the default close and notifies the renderer', () => {
             const mw = createInstance();
             const event = { preventDefault: jest.fn() };
 
@@ -33,12 +35,34 @@ describe('MainWindow', () => {
             expect(mw.win.webContents.send).toHaveBeenCalledWith('app-event', {component:'app',closing:true});
         });
 
+        it('once confirmed: lets the close proceed without preventing it or re-notifying the renderer', () => {
+            const mw = createInstance()
+            mw.confirmed = true
+            const event = { preventDefault: jest.fn() };
+
+            mw.onClose(event);
+
+            expect(event.preventDefault).not.toHaveBeenCalled();
+            expect(mw.win.webContents.send).not.toHaveBeenCalled();
+        });
+
         it('does not throw even if win has no top-level send method', () => {
             const mw = createInstance();
             expect(typeof mw.win.send).toBe('undefined');
 
             const event = { preventDefault: jest.fn() };
             expect(() => mw.onClose(event)).not.toThrow();
+        });
+    });
+
+    describe('confirmClose', () => {
+        it('marks the window as confirmed and calls the normal close() (not destroy())', () => {
+            const mw = createInstance();
+
+            mw.confirmClose();
+
+            expect(mw.confirmed).toBe(true);
+            expect(mw.win.close).toHaveBeenCalled();
         });
     });
 

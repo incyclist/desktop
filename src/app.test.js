@@ -99,7 +99,7 @@ describe('IncyclistApp - quit sequence', () => {
             expect(app.exit).not.toHaveBeenCalled()
         })
 
-        test('flushes, unregisters shortcuts, re-enables screensaver, and calls app.quit() then app.exit()', async () => {
+        test('flushes, unregisters shortcuts, re-enables screensaver, and calls app.quit() - without forcing an immediate app.exit()', async () => {
             await incyclistApp.quit()
 
             expect(incyclistApp.state.isQuitting).toBe(true)
@@ -107,7 +107,10 @@ describe('IncyclistApp - quit sequence', () => {
             expect(globalShortcut.unregisterAll).toHaveBeenCalled()
             expect(incyclistApp.enableScreensaver).toHaveBeenCalled()
             expect(app.quit).toHaveBeenCalled()
-            expect(app.exit).toHaveBeenCalled()
+            // app.exit() must NOT be called right after app.quit() - doing so races/cuts off
+            // app.quit()'s own graceful native termination (the macOS Dock-deregistration bug
+            // this fix addresses). Only the watchdog timer (tested below) may force-exit.
+            expect(app.exit).not.toHaveBeenCalled()
         })
 
         test('watchdog calls app.exit() (not process.exit()) if quit hangs', async () => {

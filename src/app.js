@@ -478,11 +478,15 @@ class IncyclistApp
             if ( process.env.DEBUG) this.logger.logEvent({message:'re-enabling screensaver'})
             this.enableScreensaver();
 
+            // Let app.quit() drive termination on its own - by this point nothing
+            // prevents it (see onBeforeQuit/onWillQuit above), so it will actually
+            // terminate the app once it finishes closing windows and firing
+            // 'will-quit'/'quit'. Forcing an immediate app.exit() right here raced
+            // that graceful native shutdown (on macOS, cutting off the Dock
+            // deregistration before it completed) - the 2s watchdog above is now the
+            // only forced-exit path, for the case app.quit() itself hangs.
             if ( process.env.DEBUG) this.logger.logEvent({message:'app.quit'})
             app.quit();
-
-            if ( process.env.DEBUG) this.logger.logEvent({message:'teminate process'})
-            app.exit();
 
         }
         catch(err) {

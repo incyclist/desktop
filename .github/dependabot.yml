@@ -1,6 +1,11 @@
 version: 2
 updates:
-  - package-ecosystem: "npm" 
+  - package-ecosystem: "npm"
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    ignore:
+      # @electron/fuses v2 requires @electron-forge/plugin-fuses v8, which is
+      # still alpha-only (see PR #190). Revisit once electron-forge 8 is stable.
+      - dependency-name: "@electron/fuses"
+        versions: [">=2.0.0"]

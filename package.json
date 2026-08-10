@@ -52,7 +52,7 @@
     "mqtt": "^5.15.2",
     "serialport": "^10.5.0",
     "update-electron-app": "^3.3.0",
-    "usb": "^2.17.0",
+    "usb": "^3.0.1",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {

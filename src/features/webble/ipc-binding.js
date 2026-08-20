@@ -94,7 +94,7 @@ class WebBleIpcBinding extends EventEmitter {
      * out later without touching call sites. Failures are never marked debug.
      */
     _log(event) {
-        if (event?.debug && !this._serverDebug)
+        if (event?.debug && !this._serverDebug && !process.env.WEB_BLE_DEBUG)
             return
         this.getApi()?.log?.(event)
     }

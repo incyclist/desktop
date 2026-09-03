@@ -39,11 +39,24 @@ jobs:
       if: ${{ inputs.sign_windows == true }}
       shell: pwsh
       env:
-        SETTINGS_FILE: ${{ secrets.CERT_WINDOWS }}
+        CERT_WINDOWS: ${{ secrets.CERT_WINDOWS }}
       run: |
-        New-Item -ItemType Directory -Force -Path .\certs
-        $encodedBytes = [System.Convert]::FromBase64String("${{ secrets.CERT_WINDOWS }}");      
-        Set-Content .\certs\installer.pfx -Value $encodedBytes -AsByteStream;
+        # Read the certificate from the environment rather than interpolating it into
+        # the script: base64 of a .pfx is line-wrapped by both `base64` and
+        # `certutil -encode`, and a multi-line value pasted into the script text is at
+        # the mercy of the PowerShell parser. It also keeps the secret out of the
+        # generated script file.
+        if ([string]::IsNullOrWhiteSpace($env:CERT_WINDOWS)) {
+          throw "CERT_WINDOWS secret is empty - cannot sign the installer"
+        }
+        New-Item -ItemType Directory -Force -Path .\certs | Out-Null
+        # WriteAllBytes rather than Set-Content -AsByteStream: no encoding or
+        # line-ending handling sits between the decoded bytes and the .pfx.
+        $b64 = $env:CERT_WINDOWS -replace '\s', ''
+        [System.IO.File]::WriteAllBytes(
+          (Join-Path (Get-Location) 'certs\installer.pfx'),
+          [System.Convert]::FromBase64String($b64)
+        )
         dir .\certs
 
     - name: Use Node.js ${{ matrix.node-version }}

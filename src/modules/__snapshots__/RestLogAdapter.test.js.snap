@@ -61,7 +61,7 @@ RestLogAdapter {
   },
   "props": {},
   "sendBusy": false,
-  "sendInterval": 120000,
+  "sendInterval": 10000,
   "url": undefined,
 }
 `;

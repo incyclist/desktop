@@ -3,6 +3,8 @@ const VideoScheme = require('./VideoScheme')
 const Support = require('./ffmpeg')
 const os = require('os')
 const path = require('path')
+const fs = require('fs')
+const { EventEmitter } = require('events')
 
 jest.mock('fluent-ffmpeg');
 const ffmpegMock = require('fluent-ffmpeg');
@@ -163,6 +165,31 @@ describe ( 'VideoScheme', ()=>{
             expect(v.convertSlow).toHaveBeenCalled();
         });
 
+        test('enforceFast skips getCodec entirely and goes straight to convertFast (faststart remux)', async () => {
+            v.getCodec = jest.fn();
+            v.convertFast = jest.fn();
+            v.convertSlow = jest.fn();
+
+            v.convertToFile('file:///testdata/sample.mp4', { enforceFast: true });
+            await new Promise(r => setImmediate(r));
+
+            expect(v.getCodec).not.toHaveBeenCalled();
+            expect(v.convertSlow).not.toHaveBeenCalled();
+            expect(v.convertFast).toHaveBeenCalledWith(expect.anything(), 'file:///testdata/sample.mp4', { enforceFast: true });
+        });
+
+        test('enforceFast wins if enforceSlow is also (incorrectly) set', async () => {
+            v.getCodec = jest.fn();
+            v.convertFast = jest.fn();
+            v.convertSlow = jest.fn();
+
+            v.convertToFile('file:///testdata/sample.mp4', { enforceFast: true, enforceSlow: true });
+            await new Promise(r => setImmediate(r));
+
+            expect(v.convertFast).toHaveBeenCalled();
+            expect(v.convertSlow).not.toHaveBeenCalled();
+        });
+
         test('emitter fires conversion.done on success', async () => {
             v.getCodec = jest.fn().mockResolvedValue('h264');
             v.convertFast = jest.fn().mockImplementation((emitter) => {
@@ -178,6 +205,64 @@ describe ( 'VideoScheme', ()=>{
             expect(result).toBe('file:///tmp/sample.mp4');
         });
     });
+    describe('readHeadTail', () => {
+        let v;
+
+        beforeEach(() => {
+            v = new VideoScheme();
+        });
+
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
+        const mockStream = (data) => {
+            const stream = new EventEmitter();
+            setImmediate(() => {
+                if (data !== undefined) stream.emit('data', Buffer.from(data));
+                stream.emit('end');
+            });
+            return stream;
+        };
+
+        test('a file smaller than the chunk size is read as a head-only chunk, no tail read', async () => {
+            jest.spyOn(fs.promises, 'stat').mockResolvedValue({ size: 10 });
+            const createReadStream = jest.spyOn(fs, 'createReadStream').mockImplementation(() => mockStream('0123456789'));
+
+            const result = await v.readHeadTail('file:///testdata/small.mp4', 1024);
+
+            expect(createReadStream).toHaveBeenCalledTimes(1);
+            expect(createReadStream).toHaveBeenCalledWith('/testdata/small.mp4', { start: 0, end: 9 });
+            expect(result.head.toString()).toBe('0123456789');
+            expect(result.tail).toBeUndefined();
+        });
+
+        test('a file larger than the chunk size gets separate, non-overlapping head and tail reads', async () => {
+            jest.spyOn(fs.promises, 'stat').mockResolvedValue({ size: 1000 });
+            const createReadStream = jest.spyOn(fs, 'createReadStream')
+                .mockImplementationOnce(() => mockStream('HEAD'))
+                .mockImplementationOnce(() => mockStream('TAIL'));
+
+            const result = await v.readHeadTail('file:///testdata/large.mp4', 100);
+
+            expect(createReadStream).toHaveBeenNthCalledWith(1, '/testdata/large.mp4', { start: 0, end: 99 });
+            expect(createReadStream).toHaveBeenNthCalledWith(2, '/testdata/large.mp4', { start: 900, end: 999 });
+            expect(result.head.toString()).toBe('HEAD');
+            expect(result.tail.toString()).toBe('TAIL');
+        });
+
+        test('propagates a read error (e.g. file no longer exists)', async () => {
+            jest.spyOn(fs.promises, 'stat').mockResolvedValue({ size: 10 });
+            jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+                const stream = new EventEmitter();
+                setImmediate(() => stream.emit('error', new Error('ENOENT')));
+                return stream;
+            });
+
+            await expect(v.readHeadTail('file:///testdata/gone.mp4', 1024)).rejects.toThrow('ENOENT');
+        });
+    });
+
     describe('getCodec',()=>{
         let v, cmdMock;
 

@@ -376,9 +376,18 @@ class VideoScheme  extends Feature {
         let codec;
 
         const emitter = new ConversionEmitter()
-        const {enforceSlow=false} = props
+        const {enforceSlow=false, enforceFast=false} = props
 
         const convert = async ()=> {
+            // enforceFast is used for the MP4 faststart remux (see readHeadTail() /
+            // services' RouteCard.onVideoSelected()): we already know the file just needs
+            // its moov atom relocated to the front, not a codec change, so skip the codec
+            // probe entirely and go straight to the stream-copy branch.
+            if (enforceFast) {
+                this.convertFast(emitter,url,props)
+                return
+            }
+
             if (!enforceSlow)  {
                 try {
                     codec = await this.getCodec(url)
@@ -386,21 +395,54 @@ class VideoScheme  extends Feature {
                 catch (err) {
                     console.log('~~~ ERROR',err)
                 }
-            }    
-            
-    
+            }
+
+
             if (codec==='h264' && !enforceSlow)
                 this.convertFast(emitter,url,props)
-            else 
-                this.convertSlow(emitter,url,props)        
-    
+            else
+                this.convertSlow(emitter,url,props)
+
         }
 
         convert();
         return emitter
     }
 
-    
+    /**
+     * Reads a bounded head chunk and tail chunk of a local video file, for services'
+     * Mp4BoxParser probe (moov atom location) to run against without pulling the whole file
+     * (which can be tens of GB) across IPC. Runs in the main process, which has full native
+     * fs access - unlike a generic fs.readFile()-over-IPC round trip, this never transfers
+     * more than 2 * chunkSize bytes.
+     *
+     * @param {string} url - url of the video to probe (video://... or file://...)
+     * @param {number} chunkSize - bytes to read from the head and (separately) the tail
+     * @returns {Promise<{head: Buffer, tail: Buffer|undefined}>}
+     */
+    async readHeadTail(url, chunkSize = 16 * 1024 * 1024) {
+        const { filename } = this.getUrlFileInfo(url)
+
+        const readRange = (start, end) => new Promise((resolve, reject) => {
+            const chunks = []
+            fs.createReadStream(filename, { start, end })
+                .on('data', (chunk) => chunks.push(chunk))
+                .on('end', () => resolve(Buffer.concat(chunks)))
+                .on('error', reject)
+        })
+
+        const { size } = await fs.promises.stat(filename)
+
+        const headEnd = Math.min(chunkSize, size) - 1
+        const head = headEnd >= 0 ? await readRange(0, headEnd) : Buffer.alloc(0)
+
+        const tailStart = Math.max(0, size - chunkSize)
+        const tail = tailStart > headEnd ? await readRange(tailStart, size - 1) : undefined
+
+        return { head, tail }
+    }
+
+
 
     /** 
      *  process request to start a video conversion to MP4
@@ -703,6 +745,7 @@ class VideoScheme  extends Feature {
         ipcHandle('video-screenshot',this.screenshot.bind(this),ipcMain )
         ipcHandle('video-convert-next',this.next.bind(this),ipcMain )
         ipcHandleObserver('video-convert-offline',this.convertToFile.bind(this),ipcMain )
+        ipcHandle('video-read-head-tail',this.readHeadTail.bind(this),ipcMain )
         
         // we need to stop active sessions on app exit, otherwise the main process would still try to send events to the renderer process
         // Uses a quit hook rather than 'before-quit', which doesn't fire on every quit path.
@@ -719,14 +762,16 @@ class VideoScheme  extends Feature {
         // via a new installer, not a hot bundle update - older installs may run this exact
         // renderer bundle for a while.
         spec.registerFeatures( [
-            'video','video.convert','video.screenshot','video.convertOffline','video.localUrlFix'
+            'video','video.convert','video.screenshot','video.convertOffline','video.localUrlFix',
+            'video.convertOffline.enforceFast','video.readHeadTail'
         ] )
 
         spec.video = {}
         spec.video.convert    = this.initConvertSession('video-convert',ipcRenderer,{debug})
         spec.video.screenshot = ipcCall('video-screenshot',ipcRenderer)
         spec.video.convertOffline  = ipcCallObserver('video-convert-offline',ipcRenderer)
-        
+        spec.video.readHeadTail    = ipcCall('video-read-head-tail',ipcRenderer)
+
 
         spec.video.session = {}
         spec.video.session.setPriority = ipcCall('video-convert-set-priority',ipcRenderer)

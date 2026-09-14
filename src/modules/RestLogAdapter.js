@@ -5,7 +5,7 @@ const os = require('os')
 const path = require('path')
 
 class RestLogAdapter extends BaseAdapter {
-    static  DEFAULT_SEND_INTERVAL = 120; // 2min
+    static  DEFAULT_SEND_INTERVAL = 10; // 10s - matches mobile's flush interval
 
     constructor(opts={}) {
         super();
@@ -126,7 +126,7 @@ class RestLogAdapter extends BaseAdapter {
                 
                 if (processed!==events.length) {
                     // trigger resending of events
-                    this.inMemoryCache.concat(events);
+                    this.inMemoryCache = this.inMemoryCache.concat(events);
                     stats.mem +=  events.length
                 }
 
@@ -135,16 +135,17 @@ class RestLogAdapter extends BaseAdapter {
             })                   
             .catch (err=> {
                 try {
+                    const fName = path.join( os.tmpdir(), `./failed_logs-${Date.now()}`)
+
                     if ( err.response !==undefined) {
-                        const fName = path.join( os.tmpdir(), `./failed_logs-${Date.now()}`)
-                        this.logger.logEvent( {message:'could not send',events:fName,status:err.response.status,statusText:err.response.statusText})                        
+                        this.logger.logEvent( {message:'could not send',events:fName,status:err.response.status,statusText:err.response.statusText})
                         fs.writeFileSync( fName,JSON.stringify(events))
                     }
                     else {
                         this.logger.logEvent( {message:'could not send',events:fName,errno:err.errno,code:err.code})
                         fs.writeFileSync( fName,JSON.stringify(events))
                     }
-    
+
                 }
                 catch {}
 

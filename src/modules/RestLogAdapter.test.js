@@ -1,5 +1,6 @@
 const RestLogAdapter = require('./RestLogAdapter')
 const axios = require ('axios')
+const fs = require('fs')
 const MockAdapter = require("axios-mock-adapter");
 
 var mock = new MockAdapter(axios);
@@ -212,6 +213,92 @@ describe('send', () => {
         expect( rla.sendBusy).toBeTruthy()
     });
 
+})
+
+describe('send - requeue of unprocessed events (regression)', () => {
+    let rla;
+
+    beforeEach( ()=> {
+        rla = new RestLogAdapter({url:'http://localhost',cacheDir:'/tmp',sendInterval:0});
+    })
+
+    afterEach( ()=> {
+        mock.reset();
+        if (rla && rla.iv)
+            clearInterval(rla.iv)
+    })
+
+    test( 'unprocessed events are actually put back into inMemoryCache, not silently dropped', async ()=> {
+        mock.onPost('http://localhost').replyOnce( 201,{count:1} );
+        rla.inMemoryCache = [
+            {context:'test',event:{a:1}},
+            {context:'test',event:{b:2}},
+        ];
+
+        const res = await rla.send();
+
+        expect(res.processed).toBe(1);
+        expect(rla.inMemoryCache).toEqual([
+            {context:'test',event:{a:1}},
+            {context:'test',event:{b:2}},
+        ]);
+    });
+
+    test( 'events requeued after a partial success are resent on the next send() call', async ()=> {
+        mock.onPost('http://localhost').replyOnce( 201,{count:1} );
+        rla.inMemoryCache = [
+            {context:'test',event:{a:1}},
+            {context:'test',event:{b:2}},
+        ];
+        await rla.send();
+
+        mock.onPost('http://localhost').replyOnce( 201,{count:2} );
+        const res2 = await rla.send();
+
+        expect(res2.processed).toBe(2);
+        expect( JSON.parse(mock.history.post[1].data)).toEqual({ events: [
+            {context:'test',event:{a:1}},
+            {context:'test',event:{b:2}},
+        ]});
+    });
+})
+
+describe('send - disk fallback on network error (regression)', () => {
+    let rla;
+    let writeFileSyncSpy;
+
+    beforeEach( ()=> {
+        rla = new RestLogAdapter({url:'http://localhost',cacheDir:'/tmp',sendInterval:0});
+        writeFileSyncSpy = jest.spyOn(fs,'writeFileSync').mockImplementation( ()=>{} );
+    })
+
+    afterEach( ()=> {
+        writeFileSyncSpy.mockRestore();
+        mock.reset();
+        if (rla && rla.iv)
+            clearInterval(rla.iv)
+    })
+
+    test( 'network error (no err.response) writes the failed batch to disk instead of throwing/dropping it', async ()=> {
+        mock.onPost('http://localhost').networkErrorOnce();
+        rla.inMemoryCache = [
+            {context:'test',event:{a:1}},
+            {context:'test',event:{b:2}},
+        ];
+
+        const res = await rla.send();
+
+        expect(res.processed).toBe(0);
+        expect(rla.sendBusy).toBeFalsy();
+        expect(writeFileSyncSpy).toHaveBeenCalledTimes(1);
+
+        const [fName, data] = writeFileSyncSpy.mock.calls[0];
+        expect(fName).toMatch(/failed_logs-/);
+        expect(JSON.parse(data)).toEqual([
+            {context:'test',event:{a:1}},
+            {context:'test',event:{b:2}},
+        ]);
+    });
 })
 
 describe('startWorker', ()=> {

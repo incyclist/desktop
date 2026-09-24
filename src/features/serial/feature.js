@@ -1,4 +1,4 @@
-const {ipcMain} = require('electron');
+const {ipcMain,app} = require('electron');
 const {TCPBinding} = require('./tcp-binding')
 const { autoDetect } = require('@serialport/bindings-cpp')
 const {IpcBinding,SerialIpcBinding,TCPIpcBinding} = require('./ipc-binding')
@@ -164,6 +164,13 @@ class SerialFeature extends Feature{
         return res;
     }
 
+    async closeAll() {
+        const openPorts = this.ports.filter(pi => pi.isOpen)
+        await Promise.all( openPorts.map( pi => this.close(pi.id).catch(err => {
+            this.logger.logEvent({message:'error',fn:'closeAll', error:err.message, id:pi.id})
+        })))
+    }
+
 
 
     register() {
@@ -182,6 +189,13 @@ class SerialFeature extends Feature{
         ipcHandle('serial-flush',this.flush.bind(this),ipcMain)
         ipcHandle('serial-drain',this.drain.bind(this),ipcMain)
 
+        // Close any still-open ports (serial or tcpip) before Node/Electron's
+        // shutdown sequence begins. Good hygiene regardless: the 'serial'
+        // binding is a native addon (@serialport/bindings-cpp) held open
+        // in-process. No shutdown crash has actually been observed for it
+        // (unlike ANT+'s 'usb' binding, which has a confirmed upstream bug),
+        // this is precautionary.
+        app.incyclistApp.registerQuitHook(() => this.closeAll());
     }
     
     registerRenderer( spec, ipcRenderer) {

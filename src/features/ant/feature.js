@@ -3,7 +3,6 @@ const {EventLogger } = require('gd-eventlog');
 const {ipcCall, ipcSendEvent, ipcCallSync, ipcCallNoResponse, ipcRegisterBroadcast, ipcHandle, ipcHandleSync, ipcHandleNoResponse} = require ('../utils')
 const Feature = require('../base')
 const AntIpcBinding = require('./ipc-binding')
-const {AntDevice,AntServerBinding} = require('incyclist-ant-plus/lib/bindings')
 //const {} = require('incyclist-ant-plus/lib/ant-device')
 const os = require('node:os')
 const path = require('node:path')
@@ -31,6 +30,18 @@ class AntFeature extends Feature{
     }
 
     getInstanceRequest(props={}) {
+
+        // Loaded lazily, on the first actual request for an ANT+ instance,
+        // rather than unconditionally at app startup. incyclist-ant-plus's
+        // AntDevice pulls in the native 'usb' package (v2.x), which has a
+        // known upstream bug (node-usb#975/#976): HotPlugManager has no
+        // virtual destructor, so Node's module teardown frees it as its base
+        // class with the wrong size. Electron 43's allocator checks that and
+        // deliberately traps (SIGTRAP) - merely loading the module is enough,
+        // independent of whether a device is ever opened. The real fix needs
+        // a patched 'usb' build; deferring the require at least means users
+        // who never touch ANT+ never load it at all.
+        const {AntDevice,AntServerBinding} = require('incyclist-ant-plus/lib/bindings')
 
         const {deviceNo,debug,loggerName, startupTimeout} = props
         const logger = new EventLogger(loggerName)
@@ -85,9 +96,7 @@ class AntFeature extends Feature{
         if (!this.ant) {
             return false;
         }
-        
         return await this.ant.close()
-        
     }
 
     getMaxChannelsRequest() {
@@ -147,6 +156,13 @@ class AntFeature extends Feature{
         ipcHandleSync('ant-freeChannel',this.freeChannelRequest.bind(this),ipcMain)
         ipcHandleSync('ant-getDeviceNumber',this.getDeviceNumberRequest.bind(this),ipcMain)
         ipcHandleNoResponse('ant-write',this.writeRequest.bind(this),ipcMain)
+
+        // Close the ANT+ USB stick before Node/Electron's shutdown sequence begins,
+        // same pattern as VideoScheme's ffmpeg stopAll(). Good hygiene on its own,
+        // but note this does NOT prevent the SIGTRAP-on-quit bug described above -
+        // that's triggered by the native module having been loaded at all, not by
+        // an open device connection, so closing it here has no effect on that crash.
+        app.incyclistApp.registerQuitHook(() => this.closeRequest());
     }
 
     registerRenderer( spec, ipcRenderer) {

@@ -251,6 +251,12 @@ class IncyclistApp
             });
             crashReporter.addExtraParameter('uuid',this.settings.uuid)
             crashReporter.addExtraParameter('appVersion',version)
+
+            app.on('before-quit', () => {
+                // Dynamically inject a flag right as the app begins graceful shutdown
+                crashReporter.addExtraParameter('is_terminating', 'true');
+            });
+
         }
         catch(err) {
             this.logger.logEvent({message:'Error', fn:'setupCrashReporting', error:err.message, stack:err.stack})
@@ -525,6 +531,9 @@ class IncyclistApp
                 if ( process.env.DEBUG) this.logger.logEvent({message:'SIGKILL (darwin)'})
                 process.kill(process.pid,'SIGKILL')
             }
+            // else if (process.platform==='linux') {
+            //     process.kill(process.pid,'SIGKILL')
+            // }
             else {
                 if ( process.env.DEBUG) this.logger.logEvent({message:'app.quit'})
                 app.quit();

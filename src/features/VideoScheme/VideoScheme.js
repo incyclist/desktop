@@ -28,6 +28,12 @@ const debug  = process.env.DEBUG;
 
 const DEFAULT_PRESET = 'veryfast'
 const DEFAULT_CRF = 25;
+const AUDIO_CODEC = 'aac'
+const AUDIO_BITRATE = '128k'
+
+// Re-encode audio to AAC (rather than copying it), as not every source audio codec
+// (e.g. PCM in AVI/MOV) is playable by Chromium inside MP4. Inputs without an audio track are not affected.
+const withAudio = (cmd) => cmd.audioCodec(AUDIO_CODEC).audioBitrate(AUDIO_BITRATE)
 
 
 class ConversionEmitter extends EventEmitter {
@@ -336,9 +342,9 @@ class VideoScheme  extends Feature {
                 .addOutputOptions('-movflags +faststart')
                 .videoCodec('libx264')   //libx264
                 .format('mp4')
-                .noAudio()
                 .outputOptions('-crf', 25)
                 .outputOptions('-preset', 'veryfast')
+            withAudio(cmd)
                 
                 this.save(emitter,cmd,outFile)                
         }
@@ -362,7 +368,7 @@ class VideoScheme  extends Feature {
                 //.addOutputOptions('-movflags +frag_keyframe+empty_moov+default_base_moof')
                 .format('mp4')
                 .videoCodec('copy')
-                .audioCodec('copy')
+            withAudio(cmd)
 
             this.save(emitter,cmd,outFile)                
         }
@@ -481,7 +487,6 @@ class VideoScheme  extends Feature {
                 .addOutputOptions('-movflags +frag_keyframe+empty_moov+default_base_moof')
                 .videoCodec('libx264')   //libx264
                 .format('mp4')
-                .noAudio()
                 .outputOptions('-crf', crf)
                 .outputOptions('-preset', preset)
                 .on('progress', (info) => {
@@ -505,6 +510,13 @@ class VideoScheme  extends Feature {
                         return;
                     sendEvent('error',err)
                 });
+
+            // streamed segments are played via MediaSource, which older renderers set up for a
+            // video-only codec string - so audio is only included when the renderer asks for it
+            if (isTrue(props.audio))
+                withAudio(cmd)
+            else
+                cmd.noAudio()
 
             if ( props.startPos) {
                 cmd.outputOptions('-ss', props.startPos)
@@ -718,8 +730,11 @@ class VideoScheme  extends Feature {
         // whether it needs to compensate for the old bug itself, since desktop/src only ships
         // via a new installer, not a hot bundle update - older installs may run this exact
         // renderer bundle for a while.
+        // 'video.audio': converted files (convertOffline) keep the audio track (AAC); the streaming
+        // conversion (convert) includes audio only when called with props.audio=true
         spec.registerFeatures( [
-            'video','video.convert','video.screenshot','video.convertOffline','video.localUrlFix'
+            'video','video.convert','video.screenshot','video.convertOffline','video.localUrlFix',
+            'video.audio'
         ] )
 
         spec.video = {}

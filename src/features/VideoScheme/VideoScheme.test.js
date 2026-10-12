@@ -3,6 +3,7 @@ const VideoScheme = require('./VideoScheme')
 const Support = require('./ffmpeg')
 const os = require('os')
 const path = require('path')
+const EventEmitter = require('events')
 
 jest.mock('fluent-ffmpeg');
 const ffmpegMock = require('fluent-ffmpeg');
@@ -219,6 +220,77 @@ describe ( 'VideoScheme', ()=>{
         })
                 
 
+    })
+
+
+    describe('audio', () => {
+        const fs = require('fs')
+        const { PassThrough } = require('stream')
+        let v, cmdMock
+
+        beforeEach(() => {
+            const chain = ['addOutputOptions','outputOptions','videoCodec','audioCodec','audioBitrate','noAudio','format','on']
+            cmdMock = {}
+            chain.forEach( fn => { cmdMock[fn] = jest.fn().mockReturnValue(cmdMock) })
+            cmdMock.pipe = jest.fn().mockReturnValue({ pipe: jest.fn() })
+            ffmpegMock.mockReturnValue(cmdMock)
+
+            v = new VideoScheme()
+            v.ffmpegSupport = { ready: jest.fn().mockResolvedValue(true), isSupported: jest.fn().mockReturnValue(true) }
+            v.save = jest.fn()
+        })
+
+        afterEach(() => {
+            jest.restoreAllMocks()
+        })
+
+        test('convertSlow keeps audio as AAC', async () => {
+            await v.convertSlow(new EventEmitter(), 'file:///testdata/sample.avi', { outDir: os.tmpdir() })
+
+            expect(cmdMock.audioCodec).toHaveBeenCalledWith('aac')
+            expect(cmdMock.audioBitrate).toHaveBeenCalledWith('128k')
+            expect(cmdMock.noAudio).not.toHaveBeenCalled()
+            expect(v.save).toHaveBeenCalled()
+        })
+
+        test('convertFast copies video but re-encodes audio as AAC', async () => {
+            await v.convertFast(new EventEmitter(), 'file:///testdata/sample.avi', { outDir: os.tmpdir() })
+
+            expect(cmdMock.videoCodec).toHaveBeenCalledWith('copy')
+            expect(cmdMock.audioCodec).toHaveBeenCalledWith('aac')
+            expect(cmdMock.audioCodec).not.toHaveBeenCalledWith('copy')
+            expect(cmdMock.noAudio).not.toHaveBeenCalled()
+        })
+
+        describe('convertRequest (streaming)', () => {
+            let event
+
+            const startConversion = async (props) => {
+                v.convertRequest(event, 'call-1', 'video:///testdata/sample.avi', props)
+                await new Promise(r => setImmediate(r))
+            }
+
+            beforeEach(() => {
+                jest.spyOn(fs, 'existsSync').mockReturnValue(true)
+                jest.spyOn(fs, 'createReadStream').mockReturnValue(new PassThrough())
+                event = { sender: { send: jest.fn() } }
+            })
+
+            test('strips audio by default (renderer MediaSource expects video only)', async () => {
+                await startConversion({})
+
+                expect(cmdMock.noAudio).toHaveBeenCalled()
+                expect(cmdMock.audioCodec).not.toHaveBeenCalled()
+                expect(event.sender.send).toHaveBeenCalledWith('video-convert:response:call-1', { success: true, data: { id: 'call-1' } }, undefined)
+            })
+
+            test('includes AAC audio when requested', async () => {
+                await startConversion({ audio: true })
+
+                expect(cmdMock.audioCodec).toHaveBeenCalledWith('aac')
+                expect(cmdMock.noAudio).not.toHaveBeenCalled()
+            })
+        })
     })
 
 })

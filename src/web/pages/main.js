@@ -2,6 +2,7 @@ const { BrowserWindow,globalShortcut} =  require('electron');
 const path = require('path')
 const {EventLogger }= require('gd-eventlog');
 const { getSourceDir } = require('../../utils');
+const NativeUISupport = require('../../features/ui/feature');
 
 class MainWindow {
 
@@ -50,7 +51,6 @@ class MainWindow {
 
         this.win = new BrowserWindow({ 
             show:false,
-            fullscreen: false, 
             title:this.app.getName(),
             icon: this.iconUrl, 
             minWidth:800,
@@ -165,7 +165,7 @@ class MainWindow {
                     win.webContents.openDevTools();
                 })
                 globalShortcut.register('CommandOrControl+Alt+F', () => {
-                    win.setFullScreen(!win.isFullScreen());
+                    NativeUISupport.getInstance().toggleWindowFullScreen(win);
                 })
     
             }
@@ -174,7 +174,7 @@ class MainWindow {
                     win.webContents.openDevTools();
                 })    
                 globalShortcut.register('CommandOrControl+Alt+F', () => {
-                    win.setFullScreen(!win.isFullScreen());
+                    NativeUISupport.getInstance().toggleWindowFullScreen(win);
                 })
             }
             this.isReady = true;

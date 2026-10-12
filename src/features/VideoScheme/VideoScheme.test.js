@@ -164,6 +164,18 @@ describe ( 'VideoScheme', ()=>{
             expect(v.convertSlow).toHaveBeenCalled();
         });
 
+        test('emitter fires conversion.error when the conversion cannot be started', async () => {
+            v.getCodec = jest.fn().mockResolvedValue('mpeg4');
+            v.convertSlow = jest.fn().mockRejectedValue(new Error('ffmpeg not available'));
+
+            const err = await new Promise((resolve) => {
+                v.convertToFile('file:///testdata/sample.avi', { outDir: os.tmpdir() })
+                    .once('conversion.error', resolve)
+            });
+
+            expect(err.message).toBe('ffmpeg not available');
+        });
+
         test('emitter fires conversion.done on success', async () => {
             v.getCodec = jest.fn().mockResolvedValue('h264');
             v.convertFast = jest.fn().mockImplementation((emitter) => {

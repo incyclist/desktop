@@ -287,7 +287,7 @@ class VideoScheme  extends Feature {
 
     }
 
-    async save(emitter,cmd,outFile) {
+    save(emitter,cmd,outFile) {
         
         const outUrl = toFileUrl(outFile)
         let duration;
@@ -396,13 +396,13 @@ class VideoScheme  extends Feature {
             
     
             if (codec==='h264' && !enforceSlow)
-                this.convertFast(emitter,url,props)
+                await this.convertFast(emitter,url,props)
             else 
-                this.convertSlow(emitter,url,props)        
+                await this.convertSlow(emitter,url,props)        
     
         }
 
-        convert();
+        convert().catch( err => emitter.emit('conversion.error',err) )
         return emitter
     }
 

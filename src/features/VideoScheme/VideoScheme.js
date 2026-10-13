@@ -28,6 +28,17 @@ const debug  = process.env.DEBUG;
 
 const DEFAULT_PRESET = 'veryfast'
 const DEFAULT_CRF = 25;
+const AUDIO_CODEC = 'aac'
+const AUDIO_BITRATE = '128k'
+
+// Re-encode audio to AAC (rather than copying it), as not every source audio codec
+// (e.g. PCM in AVI/MOV) is playable by Chromium inside MP4. Inputs without an audio track are not affected.
+const withAudio = (cmd) => cmd.audioCodec(AUDIO_CODEC).audioBitrate(AUDIO_BITRATE)
+
+// Information sent with the 'started' event of a streaming conversion: the MIME type incl. codecs of
+// the fragmented MP4 (e.g. 'video/mp4; codecs="avc1.64001F, mp4a.40.2"'), so the renderer can set up
+// its MediaSource for exactly the tracks the stream contains (with or without audio)
+const getStartedInfo = (mp4frag) => ({ mime: mp4frag?.mime })
 
 
 class ConversionEmitter extends EventEmitter {
@@ -281,7 +292,7 @@ class VideoScheme  extends Feature {
 
     }
 
-    async save(emitter,cmd,outFile) {
+    save(emitter,cmd,outFile) {
         
         const outUrl = toFileUrl(outFile)
         let duration;
@@ -336,9 +347,9 @@ class VideoScheme  extends Feature {
                 .addOutputOptions('-movflags +faststart')
                 .videoCodec('libx264')   //libx264
                 .format('mp4')
-                .noAudio()
                 .outputOptions('-crf', 25)
                 .outputOptions('-preset', 'veryfast')
+            withAudio(cmd)
                 
                 this.save(emitter,cmd,outFile)                
         }
@@ -362,7 +373,7 @@ class VideoScheme  extends Feature {
                 //.addOutputOptions('-movflags +frag_keyframe+empty_moov+default_base_moof')
                 .format('mp4')
                 .videoCodec('copy')
-                .audioCodec('copy')
+            withAudio(cmd)
 
             this.save(emitter,cmd,outFile)                
         }
@@ -390,13 +401,13 @@ class VideoScheme  extends Feature {
             
     
             if (codec==='h264' && !enforceSlow)
-                this.convertFast(emitter,url,props)
+                await this.convertFast(emitter,url,props)
             else 
-                this.convertSlow(emitter,url,props)        
+                await this.convertSlow(emitter,url,props)        
     
         }
 
-        convert();
+        convert().catch( err => emitter.emit('conversion.error',err) )
         return emitter
     }
 
@@ -481,7 +492,6 @@ class VideoScheme  extends Feature {
                 .addOutputOptions('-movflags +frag_keyframe+empty_moov+default_base_moof')
                 .videoCodec('libx264')   //libx264
                 .format('mp4')
-                .noAudio()
                 .outputOptions('-crf', crf)
                 .outputOptions('-preset', preset)
                 .on('progress', (info) => {
@@ -505,6 +515,14 @@ class VideoScheme  extends Feature {
                         return;
                     sendEvent('error',err)
                 });
+
+            // streamed segments are played via MediaSource, which older renderers set up for a
+            // video-only codec string - so audio is only included when the renderer asks for it
+            // (renderers that do, use the MIME type sent with the 'started' event)
+            if (isTrue(props.audio))
+                withAudio(cmd)
+            else
+                cmd.noAudio()
 
             if ( props.startPos) {
                 cmd.outputOptions('-ss', props.startPos)
@@ -533,7 +551,7 @@ class VideoScheme  extends Feature {
                     const info = { start:0, size: mp4frag.initialization.length, data:mp4frag.initialization};
                     segInfo.segments.push(info);
                     segInfo.progress += info.size;
-                    sendEvent('started')
+                    sendEvent('started', getStartedInfo(mp4frag))
                     
                 })
                 mp4frag.on('error',(err)=>{
@@ -718,8 +736,12 @@ class VideoScheme  extends Feature {
         // whether it needs to compensate for the old bug itself, since desktop/src only ships
         // via a new installer, not a hot bundle update - older installs may run this exact
         // renderer bundle for a while.
+        // 'video.convert.audio': converted files (convertOffline) keep the audio track (AAC); the streaming
+        // conversion (convert) includes audio only when called with props.audio=true and reports the
+        // MIME type (incl. codecs) of the stream with its 'started' event
         spec.registerFeatures( [
-            'video','video.convert','video.screenshot','video.convertOffline','video.localUrlFix'
+            'video','video.convert','video.screenshot','video.convertOffline','video.localUrlFix',
+            'video.convert.audio'
         ] )
 
         spec.video = {}

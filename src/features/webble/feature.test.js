@@ -705,6 +705,17 @@ describe('WebBleFeature — getMac', () => {
 
 describe('WebBleFeature — register', () => {
 
+    // register/registerRenderer only do something on supported platforms (linux, win32) - pin the
+    // platform, so these tests behave the same on a macOS development machine as in CI
+    let originalPlatform
+    beforeAll(() => {
+        originalPlatform = process.platform
+        Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+    })
+    afterAll(() => {
+        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+    })
+
     test('registers web-contents-created listener on app', () => {
         const feature = WebBleFeature.getInstance()
         feature.register({})
@@ -807,6 +818,17 @@ describe('WebBleFeature — registerRenderer (platform gating)', () => {
 })
 
 describe('WebBleFeature — registerRenderer', () => {
+
+    // register/registerRenderer only do something on supported platforms (linux, win32) - pin the
+    // platform, so these tests behave the same on a macOS development machine as in CI
+    let originalPlatform
+    beforeAll(() => {
+        originalPlatform = process.platform
+        Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+    })
+    afterAll(() => {
+        Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+    })
 
     let spec, ipcRenderer
 

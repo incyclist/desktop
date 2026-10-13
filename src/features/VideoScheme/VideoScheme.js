@@ -35,6 +35,11 @@ const AUDIO_BITRATE = '128k'
 // (e.g. PCM in AVI/MOV) is playable by Chromium inside MP4. Inputs without an audio track are not affected.
 const withAudio = (cmd) => cmd.audioCodec(AUDIO_CODEC).audioBitrate(AUDIO_BITRATE)
 
+// Information sent with the 'started' event of a streaming conversion: the MIME type incl. codecs of
+// the fragmented MP4 (e.g. 'video/mp4; codecs="avc1.64001F, mp4a.40.2"'), so the renderer can set up
+// its MediaSource for exactly the tracks the stream contains (with or without audio)
+const getStartedInfo = (mp4frag) => ({ mime: mp4frag?.mime })
+
 
 class ConversionEmitter extends EventEmitter {
 
@@ -513,6 +518,7 @@ class VideoScheme  extends Feature {
 
             // streamed segments are played via MediaSource, which older renderers set up for a
             // video-only codec string - so audio is only included when the renderer asks for it
+            // (renderers that do, use the MIME type sent with the 'started' event)
             if (isTrue(props.audio))
                 withAudio(cmd)
             else
@@ -545,7 +551,7 @@ class VideoScheme  extends Feature {
                     const info = { start:0, size: mp4frag.initialization.length, data:mp4frag.initialization};
                     segInfo.segments.push(info);
                     segInfo.progress += info.size;
-                    sendEvent('started')
+                    sendEvent('started', getStartedInfo(mp4frag))
                     
                 })
                 mp4frag.on('error',(err)=>{
@@ -730,11 +736,12 @@ class VideoScheme  extends Feature {
         // whether it needs to compensate for the old bug itself, since desktop/src only ships
         // via a new installer, not a hot bundle update - older installs may run this exact
         // renderer bundle for a while.
-        // 'video.audio': converted files (convertOffline) keep the audio track (AAC); the streaming
-        // conversion (convert) includes audio only when called with props.audio=true
+        // 'video.convert.audio': converted files (convertOffline) keep the audio track (AAC); the streaming
+        // conversion (convert) includes audio only when called with props.audio=true and reports the
+        // MIME type (incl. codecs) of the stream with its 'started' event
         spec.registerFeatures( [
             'video','video.convert','video.screenshot','video.convertOffline','video.localUrlFix',
-            'video.audio'
+            'video.convert.audio'
         ] )
 
         spec.video = {}

@@ -296,6 +296,21 @@ describe ( 'VideoScheme', ()=>{
                 expect(event.sender.send).toHaveBeenCalledWith('video-convert:response:call-1', { success: true, data: { id: 'call-1' } }, undefined)
             })
 
+            test('reports the MIME type of the stream with the started event', async () => {
+                const outPipe = jest.fn()
+                cmdMock.pipe = jest.fn().mockReturnValue({ pipe: outPipe })
+
+                await startConversion({ audio: true })
+
+                const mp4frag = outPipe.mock.calls[0][0]
+                const mime = 'video/mp4; codecs="avc1.64001F, mp4a.40.2"'
+                Object.defineProperty(mp4frag, 'initialization', { value: Buffer.from('init') })
+                Object.defineProperty(mp4frag, 'mime', { value: mime })
+                mp4frag.emit('initialized')
+
+                expect(event.sender.send).toHaveBeenCalledWith('video-convert:started:call-1', { mime })
+            })
+
             test('includes AAC audio when requested', async () => {
                 await startConversion({ audio: true })
 

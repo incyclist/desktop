@@ -39,29 +39,33 @@ class NativeUISupport extends Feature {
   }
 
   toggleFullScreen(){
-    let res = false;
-
     try {
       const win = app.incyclistApp.getWindowManager().getActiveWindow()
-      if (win) {
+      if (!win)
+        return false
 
-        if (os.platform() === 'darwin') {
-          // macOS specific full screen toggle
-          win.setSimpleFullScreen(!win.isSimpleFullScreen());
-        }
-        else  {
-          win.setFullScreen(!win.isFullScreen());
-
-        }
-
-        res = true;
-      }  
+      this.toggleWindowFullScreen(win)
+      return true
     }
     catch(err) {
       this.logger.logEvent( {message:'error',fn:'on(ui-toggleFullScreen)',error:err.message||err, stack:err.stack})
       return false;
     }
-    
+  }
+
+  // shared by the IPC call and the keyboard shortcut, so both use the same fullscreen mode
+  toggleWindowFullScreen(win) {
+    if (os.platform() === 'darwin') {
+      // macOS: use simple (pre-Lion) fullscreen; leave native fullscreen first if it was entered via the green button
+      if (win.isFullScreen()) {
+        win.setFullScreen(false)
+        return
+      }
+      win.setSimpleFullScreen(!win.isSimpleFullScreen());
+    }
+    else  {
+      win.setFullScreen(!win.isFullScreen());
+    }
   }
 
   // Open an URL in a Browser
@@ -179,7 +183,7 @@ class NativeUISupport extends Feature {
 
     spec.registerFeatures( [
         'shell.showItemInFolder', 'shell.openPath', 'shell.openExternal', 'shell.beep', 
-        'ui.screensaver','ui.toggleFullSccreen', 'ui.quit', 'ui.screenshot','ui.confirmExit',
+        'ui.screensaver','ui.toggleFullSccreen', 'ui.toggleFullScreen', 'ui.quit', 'ui.screenshot','ui.confirmExit',
         'ipc.broadcast'
     ] )
   }

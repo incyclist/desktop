@@ -18,10 +18,14 @@ describe('IncyclistApp - quit sequence', () => {
 
     let incyclistApp
     let logger
+    let processKill
 
     beforeEach(() => {
         jest.useFakeTimers()
         jest.clearAllMocks()
+
+        // on macOS, quit() terminates the process with a real SIGKILL - never let it reach the test runner
+        processKill = jest.spyOn(process, 'kill').mockImplementation(() => true)
 
         logger = { logEvent: jest.fn() }
 
@@ -38,6 +42,7 @@ describe('IncyclistApp - quit sequence', () => {
     })
 
     afterEach(() => {
+        processKill.mockRestore()
         jest.useRealTimers()
     })
 

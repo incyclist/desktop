@@ -94,9 +94,12 @@ jobs:
     - name: Verify signatures
       if: ${{ inputs.sign_windows == true }}
       shell: pwsh
+      env:
+        # Forks signing with their own certificate set the WINDOWS_SIGN_SUBJECT repository variable
+        WINDOWS_SIGN_SUBJECT: ${{ vars.WINDOWS_SIGN_SUBJECT || 'CN=Guido Doumen' }}
       run: |
         # The signing hook only logs failures, so check the result explicitly.
-        $expected = 'CN=Guido Doumen'
+        $expected = $env:WINDOWS_SIGN_SUBJECT
         $targets = @(
           (Get-ChildItem -Path .\out -Recurse -Filter Incyclist.exe),
           (Get-ChildItem -Path .\out -Recurse -Filter Setup.exe)

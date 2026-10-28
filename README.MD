@@ -29,15 +29,40 @@ Starts the app with Electron developer tools opened automatically. Use this when
 #### Unsigned Build
 ` > npm run make`
 
-#### Signed Build for distribution 
+#### Signed Build for distribution
 
-Before running the build, you need to setup the information so that the script can properly sign:
-- store your certificate (pfx file) in ./certs/installer.pfx
-- set the environment variable _CERTIFICATE_PASSWORD_ to the password of the certificate
+Windows binaries are signed with an [SSL.com eSigner](https://www.ssl.com/esigner/) code-signing certificate. The private key of such a certificate lives in SSL.com's cloud HSM and cannot be exported, so there is no `.pfx` file. Signing is done by SSL.com's [CodeSignTool](https://github.com/SSLcom/CodeSignTool) (a Java program), which is called for `Incyclist.exe`, `Update.exe` and `Setup.exe` only.
 
-` > npm run make-win-dist`
+Every file that is signed counts as one signing against your eSigner subscription, so signing is always opt-in.
+
+You need:
+- an SSL.com code-signing certificate with eSigner, enrolled for remote signing with an OTP. During OTP setup, copy the text **secret code** shown next to the QR code - CodeSignTool needs it to generate the one-time codes
+- Java and a downloaded copy of CodeSignTool
+
+Set these environment variables before running the build:
+
+| Variable | Value |
+|---|---|
+| `SIGN_WINDOWS` | `true` |
+| `CODE_SIGN_TOOL_JAR` | full path of the `code_sign_tool-*.jar` from the CodeSignTool download |
+| `SSL_COM_USERNAME` | your SSL.com login |
+| `SSL_COM_PASSWORD` | your SSL.com password |
+| `SSL_COM_CREDENTIAL_ID` | the credential ID (UUID) of your eSigner certificate |
+| `SSL_COM_TOTP_SECRET` | the OTP secret code from the enrollment |
+
+` > npm run make-windows-dist`
 
 In both cases, the result of the build can be found in [./out/make/squirrel.windows/x64/](./out/make/squirrel.windows/x64/)
+
+#### Building and signing with GitHub Actions (fork)
+
+The workflow [win-build.yml](.github/workflows/win-build.yml) builds and optionally signs the installer. To use it for your own version of the app, fork the repository and enable Actions in your fork. Secrets are stored per repository, so your fork needs its own:
+
+- `SETTINGS_FILE`: content of the `config/settings.json` used for the build
+- `RELEASE_SERVER`: the update server the app should check
+- for signed builds: `SSL_COM_USERNAME`, `SSL_COM_PASSWORD`, `SSL_COM_CREDENTIAL_ID`, `SSL_COM_TOTP_SECRET` (see the table above)
+
+Builds are unsigned by default. To sign, start the workflow manually (Actions → Windows x64 Build → Run workflow) and tick `sign_windows`. After signing, the workflow checks that the files carry a valid signature of the expected certificate subject. That subject defaults to the one of the Incyclist certificate, so set the repository variable `WINDOWS_SIGN_SUBJECT` (for example `CN=Your Name`) to the subject of your own certificate.
 
 ### Mac
 
@@ -79,6 +104,8 @@ Before running the build, you need to setup the information so that the script c
 
 Once these steps are done, you can trigger the build using:
 ` > npm run make-mac-dist`
+
+To build in GitHub Actions instead, fork the repository, enable Actions and store the certificates, provisioning profile and the values from step 6 as secrets in your fork, as read by [mac-build.yml](.github/workflows/mac-build.yml). Then start the workflow manually and tick `sign_mac`.
 
 
 #### Signed Build for AppStore distribution

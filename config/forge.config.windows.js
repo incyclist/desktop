@@ -1,9 +1,11 @@
 const updateWebBundle = require('../scripts/update-web-bundle')
 const fs = require('fs/promises')
+const path = require('path')
 
-// Signing is opt-in: set SIGN_WINDOWS=true (see .github/workflows/win-build.yml)
-// once a valid, non-expired code-signing certificate is available.
+// Signing is opt-in: set SIGN_WINDOWS=true (see .github/workflows/win-build.yml).
+// Files are signed through SSL.com eSigner (CodeSignTool); the hook limits which files are sent.
 const signWindows = process.env.SIGN_WINDOWS === 'true'
+const windowsSign = { hookModulePath: path.resolve(__dirname, '../src/modules/windowsSign.js') }
 
 module.exports = {
   hooks: {
@@ -21,7 +23,8 @@ module.exports = {
     appBundleId: 'com.incyclist.desktop',
     name: 'Incyclist',
     icon: 'res/icons/incyclist',
-    ignore: [ 
+    ...(signWindows ? { windowsSign } : {}),
+    ignore: [
       '^/node_modules/.*/noble/build',
       '^/.github','^/.gitignore', '^/app-tests','^coverage','^/certs', '^/entitlements','^/profiles','^/bin','^/installer','^/release','scripts','^/config','^/test','^/test-results','^/testdata',
       'README.MD','playwright.config.ts','forge.config.js','^/.env']
@@ -32,12 +35,7 @@ module.exports = {
       config: {
         authors: "Guido Doumen, Jeroen Doumen",
         setupIcon:'res/icons/incyclist.ico',
-        ...(signWindows ? {
-          windowsSign: {
-            certificateFile: './certs/installer.pfx',
-            certificatePassword: process.env.CERTIFICATE_PASSWORD,
-          }
-        } : {})
+        ...(signWindows ? { windowsSign } : {})
       }
     }
   ]

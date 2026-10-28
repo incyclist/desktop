@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       sign_windows:
-        description: 'Sign the Windows installer (requires a valid, non-expired code-signing certificate in the CERT_WINDOWS secret)'
+        description: 'Sign Incyclist.exe, Update.exe and Setup.exe via SSL.com eSigner (billable - uses the SSL_COM_* secrets)'
         type: boolean
         default: false
 
@@ -35,29 +35,40 @@ jobs:
         $env:SETTINGS_FILE | Out-File .\config\settings.json
         dir .\config
 
-    - name: Generate certificate file from secret
+    - name: Check signing credentials
       if: ${{ inputs.sign_windows == true }}
       shell: pwsh
       env:
-        CERT_WINDOWS: ${{ secrets.CERT_WINDOWS }}
+        SSL_COM_USERNAME: ${{ secrets.SSL_COM_USERNAME }}
+        SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
+        SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+        SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
       run: |
-        # Read the certificate from the environment rather than interpolating it into
-        # the script: base64 of a .pfx is line-wrapped by both `base64` and
-        # `certutil -encode`, and a multi-line value pasted into the script text is at
-        # the mercy of the PowerShell parser. It also keeps the secret out of the
-        # generated script file.
-        if ([string]::IsNullOrWhiteSpace($env:CERT_WINDOWS)) {
-          throw "CERT_WINDOWS secret is empty - cannot sign the installer"
+        # Fail before spending build time or signings if a secret is missing
+        foreach ($name in 'SSL_COM_USERNAME','SSL_COM_PASSWORD','SSL_COM_CREDENTIAL_ID','SSL_COM_TOTP_SECRET') {
+          if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+            throw "$name secret is empty - cannot sign"
+          }
         }
-        New-Item -ItemType Directory -Force -Path .\certs | Out-Null
-        # WriteAllBytes rather than Set-Content -AsByteStream: no encoding or
-        # line-ending handling sits between the decoded bytes and the .pfx.
-        $b64 = $env:CERT_WINDOWS -replace '\s', ''
-        [System.IO.File]::WriteAllBytes(
-          (Join-Path (Get-Location) 'certs\installer.pfx'),
-          [System.Convert]::FromBase64String($b64)
-        )
-        dir .\certs
+
+    - name: Set up Java (for CodeSignTool)
+      if: ${{ inputs.sign_windows == true }}
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: '21'
+
+    - name: Download CodeSignTool
+      if: ${{ inputs.sign_windows == true }}
+      shell: pwsh
+      run: |
+        $version = 'v1.3.2'
+        $url = "https://github.com/SSLcom/CodeSignTool/releases/download/$version/CodeSignTool-$version-windows.zip"
+        Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\codesigntool.zip"
+        Expand-Archive -Path "$env:RUNNER_TEMP\codesigntool.zip" -DestinationPath "$env:RUNNER_TEMP\codesigntool"
+        $jar = Get-ChildItem -Path "$env:RUNNER_TEMP\codesigntool" -Recurse -Filter 'code_sign_tool*.jar' | Select-Object -First 1
+        if (-not $jar) { throw "code_sign_tool jar not found in CodeSignTool $version archive" }
+        "CODE_SIGN_TOOL_JAR=$($jar.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v7
@@ -71,12 +82,39 @@ jobs:
       env:
         RELEASE_SERVER: ${{ secrets.RELEASE_SERVER }}
         SIGN_WINDOWS: ${{ inputs.sign_windows }}
-        CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+        SSL_COM_USERNAME: ${{ secrets.SSL_COM_USERNAME }}
+        SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
+        SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+        SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
       run: |
         $env:BUILD_TARGET = "dist"
         npm install
         npm run make
   
+    - name: Verify signatures
+      if: ${{ inputs.sign_windows == true }}
+      shell: pwsh
+      run: |
+        # The signing hook only logs failures, so check the result explicitly.
+        $expected = 'CN=Guido Doumen'
+        $targets = @(
+          (Get-ChildItem -Path .\out -Recurse -Filter Incyclist.exe),
+          (Get-ChildItem -Path .\out -Recurse -Filter Setup.exe)
+        )
+        # Update.exe is only present inside the nupkg; Setup.exe embeds it. Check what is on disk.
+        $targets += Get-ChildItem -Path .\out -Recurse -Filter Update.exe
+        $targets = $targets | ForEach-Object { $_ }
+        if (-not ($targets | Where-Object Name -eq 'Setup.exe')) { throw "Setup.exe not found in .\out" }
+        if (-not ($targets | Where-Object Name -eq 'Incyclist.exe')) { throw "Incyclist.exe not found in .\out" }
+        $failed = $false
+        foreach ($f in $targets) {
+          $sig = Get-AuthenticodeSignature -LiteralPath $f.FullName
+          $subject = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { '' }
+          Write-Host "$($f.FullName): $($sig.Status) $subject"
+          if ($sig.Status -ne 'Valid' -or $subject -notlike "*$expected*") { $failed = $true }
+        }
+        if ($failed) { throw "One or more files are not signed correctly" }
+
     - uses: actions/upload-artifact@v7
       with:
         name: package

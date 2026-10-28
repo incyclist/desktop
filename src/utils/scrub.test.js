@@ -9,48 +9,25 @@ describe('scrub', () => {
         beforeEach(() => { homedir = jest.spyOn(os, 'homedir') })
         afterEach(() => { homedir.mockRestore() })
 
-        test('replaces the current home directory (posix)', () => {
-            homedir.mockReturnValue('/home/jane')
-            expect(scrubString('/home/jane/.config/Incyclist/logs')).toBe('$HOME/.config/Incyclist/logs')
-        })
+        // [description, home directory, input, expected]
+        const cases = [
+            ['current home directory (posix)', '/home/jane', '/home/jane/.config/Incyclist/logs', '$HOME/.config/Incyclist/logs'],
+            ['user name with spaces', 'C:\\Users\\Jane Doe', 'C:\\Users\\Jane Doe\\AppData\\Roaming', '$HOME\\AppData\\Roaming'],
+            ['JSON-escaped windows path', 'C:\\Users\\jane', '{"p":"C:\\\\Users\\\\jane\\\\a.mp4"}', '{"p":"$HOME\\\\a.mp4"}'],
+            ['url encoded user name in a url', '/home/jane doe', 'video:///home/jane%20doe/Videos/a.mp4', 'video://$HOME/Videos/a.mp4'],
+            ['other user (posix, in stack trace)', '/home/jane', 'at x (/Users/bob/dev/app.js:1:2)', 'at x ($HOME/dev/app.js:1:2)'],
+            ['other user (windows, in stack trace)', '/home/jane', 'at x (C:\\Users\\bob\\Local\\a.js)', 'at x ($HOME\\Local\\a.js)'],
+            ['other user (lower case windows path)', '/home/jane', 'at x (c:/users/bob/a.js)', 'at x ($HOME/a.js)'],
+            ['multiple occurrences', '/home/jane', 'ENOENT /home/jane/a -> /home/jane/b', 'ENOENT $HOME/a -> $HOME/b'],
+            ['other drive (untouched)', '/home/jane', 'D:\\Videos\\a.mp4', 'D:\\Videos\\a.mp4'],
+            ['network mount (untouched)', '/home/jane', '/mnt/nas/videos/a.mp4', '/mnt/nas/videos/a.mp4'],
+            ['system path (untouched)', '/home/jane', '/usr/lib/incyclist', '/usr/lib/incyclist'],
+            ['root-like home directory', '/', '/etc/hosts', '/etc/hosts'],
+        ]
 
-        test('replaces home directory with spaces in the user name', () => {
-            homedir.mockReturnValue('C:\\Users\\Jane Doe')
-            expect(scrubString('C:\\Users\\Jane Doe\\AppData\\Roaming\\Incyclist')).toBe('$HOME\\AppData\\Roaming\\Incyclist')
-        })
-
-        test('replaces JSON-escaped windows paths', () => {
-            homedir.mockReturnValue('C:\\Users\\jane')
-            expect(scrubString('{"p":"C:\\\\Users\\\\jane\\\\Videos\\\\a.mp4"}')).toBe('{"p":"$HOME\\\\Videos\\\\a.mp4"}')
-        })
-
-        test('replaces file:// urls, incl. url encoded names', () => {
-            homedir.mockReturnValue('/home/jane doe')
-            expect(scrubString('video:///home/jane%20doe/Videos/a.mp4')).toBe('video://$HOME/Videos/a.mp4')
-        })
-
-        test('replaces other users home dirs in stack traces', () => {
-            homedir.mockReturnValue('/home/jane')
-            expect(scrubString('at x (/Users/bob/dev/app.js:1:2)')).toBe('at x ($HOME/dev/app.js:1:2)')
-            expect(scrubString('at x (C:\\Users\\bob\\AppData\\Local\\app.asar\\a.js)')).toBe('at x ($HOME\\AppData\\Local\\app.asar\\a.js)')
-            expect(scrubString('at x (c:/users/bob/a.js)')).toBe('at x ($HOME/a.js)')
-        })
-
-        test('replaces multiple occurrences', () => {
-            homedir.mockReturnValue('/home/jane')
-            expect(scrubString('ENOENT /home/jane/a -> /home/jane/b')).toBe('ENOENT $HOME/a -> $HOME/b')
-        })
-
-        test('leaves paths outside of a home directory untouched', () => {
-            homedir.mockReturnValue('/home/jane')
-            expect(scrubString('D:\\Videos\\a.mp4')).toBe('D:\\Videos\\a.mp4')
-            expect(scrubString('/mnt/nas/videos/a.mp4')).toBe('/mnt/nas/videos/a.mp4')
-            expect(scrubString('/usr/lib/incyclist')).toBe('/usr/lib/incyclist')
-        })
-
-        test('does not break on a root-like home directory', () => {
-            homedir.mockReturnValue('/')
-            expect(scrubString('/etc/hosts')).toBe('/etc/hosts')
+        test.each(cases)('%s', (_name, home, input, expected) => {
+            homedir.mockReturnValue(home)
+            expect(scrubString(input)).toBe(expected)
         })
 
         test('ignores non-strings', () => {

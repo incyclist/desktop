@@ -5,7 +5,7 @@ const MAX_DEPTH = 10
 
 // a path segment of a user name: stops at separators, whitespace and quotes
 const SEG = '[^\\\\/\\s\'"`:*?<>|]+'
-const SEP = '(?:\\\\|/)'
+const SEP = String.raw`(?:\\|/)`
 
 // Fallback for home directories of other machines/users (e.g. in stack traces of bundled code)
 const GENERIC_SOURCES = [
@@ -14,7 +14,7 @@ const GENERIC_SOURCES = [
     `/Users/${SEG}`,
 ]
 
-const escapeRegExp = (s) => s.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const escapeRegExp = (s) => s.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 
 // matches a path with either separator, and with JSON-escaped backslashes
 const buildHomeSource = (home) => {

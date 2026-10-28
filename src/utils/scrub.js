@@ -1,4 +1,4 @@
-const os = require('os')
+const os = require('node:os')
 
 const PLACEHOLDER = '$HOME'
 const MAX_DEPTH = 10
@@ -14,7 +14,7 @@ const GENERIC_SOURCES = [
     `/Users/${SEG}`,
 ]
 
-const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const escapeRegExp = (s) => s.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // matches a path with either separator, and with JSON-escaped backslashes
 const buildHomeSource = (home) => {
@@ -64,7 +64,7 @@ const scrubString = (str) => {
     if (!quick.test(str)) return str
 
     replace.lastIndex = 0
-    return str.replace(replace, () => PLACEHOLDER)
+    return str.replaceAll(replace, () => PLACEHOLDER)
 }
 
 const isPlainObject = (o) => {
@@ -72,8 +72,37 @@ const isPlainObject = (o) => {
     return proto === Object.prototype || proto === null
 }
 
+const walkArray = (arr, depth, ctx) => {
+    let res = arr
+    for (let i = 0; i < arr.length; i++) {
+        const nv = walk(arr[i], depth + 1, ctx)
+        if (nv !== arr[i]) {
+            if (res === arr) res = arr.slice()
+            res[i] = nv
+        }
+    }
+    return res
+}
+
+const walkObject = (obj, depth, ctx) => {
+    const keys = Object.keys(obj)
+    let out = null
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]
+        const nk = scrubString(key)
+        const nv = walk(obj[key], depth + 1, ctx)
+
+        if (out === null && (nk !== key || nv !== obj[key])) {
+            out = {}
+            for (const prev of keys.slice(0, i)) out[prev] = obj[prev]
+        }
+        if (out !== null) out[nk] = nv
+    }
+    return out ?? obj
+}
+
 // copy-on-write: containers are only copied if something inside them changed
-const walk = (value, depth, ctx) => {
+function walk(value, depth, ctx) {
     if (typeof value === 'string') return scrubString(value)
     if (value === null || typeof value !== 'object') return value
 
@@ -85,36 +114,7 @@ const walk = (value, depth, ctx) => {
     if (depth >= MAX_DEPTH) return '{...}' // fail closed, never pass on what we did not inspect
 
     ctx.active.add(value)
-    let res = value
-
-    if (isArray) {
-        for (let i = 0; i < value.length; i++) {
-            const v = value[i]
-            const nv = walk(v, depth + 1, ctx)
-            if (nv !== v) {
-                if (res === value) res = value.slice()
-                res[i] = nv
-            }
-        }
-    }
-    else {
-        const keys = Object.keys(value)
-        let out = null
-        for (let i = 0; i < keys.length; i++) {
-            const key = keys[i]
-            const nk = scrubString(key)
-            const v = value[key]
-            const nv = walk(v, depth + 1, ctx)
-
-            if (out === null && (nk !== key || nv !== v)) {
-                out = {}
-                for (let j = 0; j < i; j++) out[keys[j]] = value[keys[j]]
-            }
-            if (out !== null) out[nk] = nv
-        }
-        if (out !== null) res = out
-    }
-
+    const res = isArray ? walkArray(value, depth, ctx) : walkObject(value, depth, ctx)
     ctx.active.delete(value)
     // unchanged containers are returned as is anyway, so only changed ones need to be remembered
     if (res !== value) ctx.done.set(value, res)

@@ -1,4 +1,4 @@
-const os = require('os')
+const os = require('node:os')
 const { scrubString, scrubValue, withPathScrubbing, resetCache } = require('./scrub')
 
 describe('scrub', () => {

@@ -61,7 +61,7 @@ The workflow [win-build.yml](.github/workflows/win-build.yml) builds and optiona
 - `SETTINGS_FILE`: content of the `config/settings.json` used for the build (the workflow writes it to that file before building)
 - for signed builds: `SSL_COM_USERNAME`, `SSL_COM_PASSWORD`, `SSL_COM_CREDENTIAL_ID`, `SSL_COM_TOTP_SECRET` (see the table above)
 
-Builds are unsigned by default. To sign, start the workflow manually (Actions → Windows x64 Build → Run workflow) and tick `sign_windows`. After signing, the workflow checks that the files carry a valid signature of the expected certificate subject. That subject defaults to the one of the Incyclist certificate, so set the repository variable `WINDOWS_SIGN_SUBJECT` (for example `CN=Your Name`) to the subject of your own certificate.
+Builds are unsigned by default. To sign, start the workflow manually (Actions → Windows x64 Build → Run workflow) and tick `sign_windows`. Signing is only allowed on the `main` branch and only for repository admins. The signing job runs in the GitHub environment `windows-signing`: create it in your fork (Settings → Environments), restrict its deployment branches to `main` and store the four `SSL_COM_*` secrets there instead of as repository secrets. That way no other branch can read them. After signing, the workflow checks that the files carry a valid signature of the expected certificate subject. That subject defaults to the one of the Incyclist certificate, so set the repository variable `WINDOWS_SIGN_SUBJECT` (for example `CN=Your Name`) to the subject of your own certificate.
 
 ### Mac
 

@@ -61,7 +61,7 @@ describe('windowsSign', () => {
                 '-credential_id=cred',
                 '-totp_secret=totp',
                 '-input_file_path=C:\\tmp\\Setup.exe',
-                '-override=true'
+                '-override'
             ])
         })
     })

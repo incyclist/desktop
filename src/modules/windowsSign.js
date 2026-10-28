@@ -33,20 +33,32 @@ const buildArgs = (file, env = process.env) => [
     `-credential_id=${env.SSL_COM_CREDENTIAL_ID}`,
     `-totp_secret=${env.SSL_COM_TOTP_SECRET}`,
     `-input_file_path=${file}`,
-    '-override=true'
+    '-override'
 ]
 
-// Squirrel may offer a file the packager has already signed. Signing it again would be billed again.
-const isAlreadySigned = async (file) => {
+const getSignatureStatus = async (file) => {
     const script = `(Get-AuthenticodeSignature -LiteralPath $env:SIGN_CHECK_FILE).Status`
     try {
         const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], {
             env: { ...process.env, SIGN_CHECK_FILE: file }
         })
-        return stdout.trim() === 'Valid'
+        return stdout.trim()
     }
     catch {
-        return false
+        return 'Unknown'
+    }
+}
+
+const runCodeSignTool = async (file) => {
+    try {
+        const { stdout, stderr } = await execFileAsync('java', buildArgs(file), { maxBuffer: 10 * 1024 * 1024 })
+        console.log(`windows-sign: CodeSignTool stdout:\n${stdout}`)
+        console.log(`windows-sign: CodeSignTool stderr:\n${stderr}`)
+    }
+    catch (err) {
+        // CodeSignTool prints its failure reason to stdout/stderr
+        console.log(`windows-sign: CodeSignTool failed (exit ${err.code}):\n${err.stdout}\n${err.stderr}`)
+        throw new Error(`CodeSignTool failed while signing ${file}`)
     }
 }
 
@@ -62,19 +74,21 @@ async function windowsSign(file) {
         throw new Error(`Cannot sign ${file}: missing environment variables ${missing.join(', ')}`)
     }
 
-    if (await isAlreadySigned(file)) {
+    // Squirrel may offer a file the packager has already signed. Signing it again would be billed again.
+    if (await getSignatureStatus(file) === 'Valid') {
         console.log(`windows-sign: ${file} is already signed, skipping`)
         return
     }
 
     console.log(`windows-sign: signing ${file}`)
-    const { stdout } = await execFileAsync('java', buildArgs(file), { maxBuffer: 10 * 1024 * 1024 })
-    console.log(stdout)
+    await runCodeSignTool(file)
 
-    // CodeSignTool reports some failures on stdout with exit code 0
-    if (/error/i.test(stdout)) {
-        throw new Error(`CodeSignTool reported an error while signing ${file}`)
+    // CodeSignTool can exit successfully without having signed anything
+    const status = await getSignatureStatus(file)
+    if (status !== 'Valid') {
+        throw new Error(`${file} has signature status ${status} after signing`)
     }
+    console.log(`windows-sign: signed ${file}`)
 }
 
 module.exports = windowsSign

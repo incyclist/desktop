@@ -11,6 +11,7 @@ const {initFeaturesApp} = require('./features');
 const SecretsFeature = require('./features/secrets/feature');
 const AppSettings  = require('./features/AppSettings');
 const { restLogFilter, fileLogFilter } = require('./utils/logging');
+const { withPathScrubbing } = require('./utils/scrub');
 
 const { version,name} = require('../package.json');
 const WindowManager = require('./web/manager');
@@ -295,7 +296,7 @@ class IncyclistApp
         let fileName = path.join(getLogDirectory(),'./logfile.json')
         deleteFile(fileName)
 
-        this.consoleAdapter = new ConsoleAdapter({depth:1})        
+        this.consoleAdapter = new ConsoleAdapter({depth:1})
         const fileAdapter = new FileAdapter({name: fileName,depth:1})
         EventLogger.registerAdapter(this.consoleAdapter,fileLogFilter);
         EventLogger.registerAdapter(fileAdapter,fileLogFilter);   
@@ -326,7 +327,8 @@ class IncyclistApp
                 if ( this.settings.logRest!==undefined) 
                     settings = JSON.parse(JSON.stringify((this.settings.logRest)));
                 settings.url = this.getLoggingUrl()
-                this.restAdapter = new RestLogAdapter(settings);
+                // only the REST adapter leaves the user's PC, console and file logs stay local
+                this.restAdapter = withPathScrubbing(new RestLogAdapter(settings));
                 this.logger.logEvent({message:'REST logging initialized',settings})
                 EventLogger.registerAdapter(this.restAdapter, restLogFilter)
             }

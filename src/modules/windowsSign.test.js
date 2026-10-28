@@ -7,7 +7,8 @@ describe('windowsSign', () => {
             'C:\\work\\out\\Incyclist-win32-x64\\Incyclist.exe',
             'C:\\tmp\\Update.exe',
             'C:\\tmp\\Setup.exe',
-            '/tmp/setup.EXE'
+            '/tmp/setup.EXE',
+            'C:\\work\\out\\make\\Incyclist-26.8.2 Setup.exe'
         ])('signs %s', (file) => {
             expect(shouldSign(file)).toBe(true)
         })

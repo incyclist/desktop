@@ -6,7 +6,9 @@ const execFileAsync = promisify(execFile)
 
 // Every file sent to eSigner is a billable signing, so only these are signed.
 // Squirrel and the packager offer many more files (DLLs, .node modules, ...).
-const FILES_TO_SIGN = ['incyclist.exe', 'update.exe', 'setup.exe']
+const FILES_TO_SIGN = ['incyclist.exe', 'update.exe']
+// The installer is renamed to include the app name and version, e.g. "Incyclist-1.2.3 Setup.exe"
+const INSTALLER_SUFFIX = 'setup.exe'
 
 const REQUIRED_ENV = [
     'CODE_SIGN_TOOL_JAR',
@@ -16,7 +18,10 @@ const REQUIRED_ENV = [
     'SSL_COM_TOTP_SECRET'
 ]
 
-const shouldSign = (file) => FILES_TO_SIGN.includes(path.win32.basename(file).toLowerCase())
+const shouldSign = (file) => {
+    const name = path.win32.basename(file).toLowerCase()
+    return FILES_TO_SIGN.includes(name) || name.endsWith(INSTALLER_SUFFIX)
+}
 
 const getMissingEnv = (env = process.env) => REQUIRED_ENV.filter(key => !env[key])
 

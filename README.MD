@@ -58,8 +58,7 @@ In both cases, the result of the build can be found in [./out/make/squirrel.wind
 
 The workflow [win-build.yml](.github/workflows/win-build.yml) builds and optionally signs the installer. To use it for your own version of the app, fork the repository and enable Actions in your fork. Secrets are stored per repository, so your fork needs its own:
 
-- `SETTINGS_FILE`: content of the `config/settings.json` used for the build
-- `RELEASE_SERVER`: the update server the app should check
+- `SETTINGS_FILE`: content of the `config/settings.json` used for the build (the workflow writes it to that file before building)
 - for signed builds: `SSL_COM_USERNAME`, `SSL_COM_PASSWORD`, `SSL_COM_CREDENTIAL_ID`, `SSL_COM_TOTP_SECRET` (see the table above)
 
 Builds are unsigned by default. To sign, start the workflow manually (Actions → Windows x64 Build → Run workflow) and tick `sign_windows`. After signing, the workflow checks that the files carry a valid signature of the expected certificate subject. That subject defaults to the one of the Incyclist certificate, so set the repository variable `WINDOWS_SIGN_SUBJECT` (for example `CN=Your Name`) to the subject of your own certificate.

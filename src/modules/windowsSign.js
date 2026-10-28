@@ -25,6 +25,10 @@ const shouldSign = (file) => {
 
 const getMissingEnv = (env = process.env) => REQUIRED_ENV.filter(key => !env[key])
 
+// CodeSignTool reads ./conf/code_sign_tool.properties relative to its working directory.
+// The jar sits in <tool dir>/jar, so the tool dir is its parent.
+const getToolDir = (env = process.env) => path.win32.dirname(path.win32.dirname(env.CODE_SIGN_TOOL_JAR))
+
 const buildArgs = (file, env = process.env) => [
     '-jar', env.CODE_SIGN_TOOL_JAR,
     'sign',
@@ -51,7 +55,7 @@ const getSignatureStatus = async (file) => {
 
 const runCodeSignTool = async (file) => {
     try {
-        const { stdout, stderr } = await execFileAsync('java', buildArgs(file), { maxBuffer: 10 * 1024 * 1024 })
+        const { stdout, stderr } = await execFileAsync('java', buildArgs(file), { cwd: getToolDir(), maxBuffer: 10 * 1024 * 1024 })
         console.log(`windows-sign: CodeSignTool stdout:\n${stdout}`)
         console.log(`windows-sign: CodeSignTool stderr:\n${stderr}`)
     }
@@ -96,4 +100,5 @@ module.exports.default = windowsSign
 module.exports.shouldSign = shouldSign
 module.exports.getMissingEnv = getMissingEnv
 module.exports.buildArgs = buildArgs
+module.exports.getToolDir = getToolDir
 module.exports.FILES_TO_SIGN = FILES_TO_SIGN

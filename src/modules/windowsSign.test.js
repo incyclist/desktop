@@ -1,4 +1,4 @@
-const { shouldSign, getMissingEnv, buildArgs } = require('./windowsSign')
+const { shouldSign, getMissingEnv, buildArgs, getToolDir } = require('./windowsSign')
 
 describe('windowsSign', () => {
 
@@ -63,6 +63,13 @@ describe('windowsSign', () => {
                 '-input_file_path=C:\\tmp\\Setup.exe',
                 '-override'
             ])
+        })
+    })
+
+    describe('getToolDir', () => {
+        test('is the parent of the directory holding the jar', () => {
+            expect(getToolDir({ CODE_SIGN_TOOL_JAR: 'D:\\a\\_temp\\codesigntool\\jar\\code_sign_tool-1.3.2.jar' }))
+                .toBe('D:\\a\\_temp\\codesigntool')
         })
     })
 })

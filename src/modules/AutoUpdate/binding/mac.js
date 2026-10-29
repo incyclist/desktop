@@ -53,36 +53,6 @@ function patchSetFeedURL() {
     feedPatched = autoUpdater.setFeedURL !== original
 }
 
-// ---- TEMPORARY: BEGIN ----------------------------------------------------------------------------
-// Local testing against an update server that only speaks http (UPDATE_SERVER_URL=http://<ip>:<port>).
-// update-electron-app refuses everything but https feeds, so for http feeds electron's autoUpdater is
-// driven directly (this still goes through the macos= patch above). Only logs the outcome, does not
-// install anything. To be removed once the feed routing has been verified (see also the temporary
-// NSAppTransportSecurity entry in config/forge.config.darwin.unsigned.js).
-const HTTP_FEED_EVENTS = ['error', 'checking-for-update', 'update-available', 'update-not-available', 'update-downloaded']
-let httpFeedListenersAttached = false
-
-function checkHttpFeed(feedURL, log) {
-    const say = (...args) => {
-        log(...args)
-        console.log('[AutoUpdate http feed]', ...args)
-    }
-
-    if (!httpFeedListenersAttached) {
-        HTTP_FEED_EVENTS.forEach(event => {
-            autoUpdater.on(event, (...args) => say(event, ...args.map(a => a?.message ?? String(a))))
-        })
-        httpFeedListenersAttached = true
-    }
-
-    const url = `${feedURL}/RELEASES.json`
-    say('feedURL (http - update-electron-app bypassed)', url)
-    autoUpdater.setFeedURL({ url, serverType: 'json' })
-    autoUpdater.checkForUpdates()
-    return { stopUpdates: () => {} }
-}
-// ---- TEMPORARY: END ------------------------------------------------------------------------------
-
 class Updatehandler extends UpdatehandlerBase {
 
 
@@ -107,10 +77,6 @@ class Updatehandler extends UpdatehandlerBase {
             catch (err) {
                 this.logger?.logEvent?.({ message: 'AutoUpdate feed url patch failed', error: err.message })
             }
-
-            // TEMPORARY (see above)
-            if (this.feedURL?.startsWith('http://'))
-                return checkHttpFeed(this.feedURL, log)
 
             const config = {
                 updateSource: {

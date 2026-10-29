@@ -21,7 +21,7 @@ describe('mac auto update binding', () => {
         // one and the same module object here - the parts used by the binding are attached to it
         jest.isolateModules(() => {
             electron = require('electron')
-            electron.autoUpdater = { setFeedURL: jest.fn(), checkForUpdates: jest.fn(), on: jest.fn() }
+            electron.autoUpdater = { setFeedURL: jest.fn() }
             electron.UpdateSourceType = { StaticStorage: 1 }
             // same URL handling as the real library for static storage on macOS
             electron.updateElectronApp = jest.fn((config) => {
@@ -167,59 +167,4 @@ describe('mac auto update binding', () => {
 
         await expect(create().checkForUpdates()).resolves.toBeNull()
     })
-
-    // TEMPORARY: BEGIN - belongs to the temporary http feed support in mac.js, remove together with it
-    describe('http feed (temporary)', () => {
-        const HTTP_FEED = 'http://192.168.2.10:4000/download/app/latest/darwin/x64'
-
-        const createHttp = (logger) => {
-            const h = new Handler(undefined, logger)
-            h.feedURL = HTTP_FEED
-            return h
-        }
-
-        let consoleLog
-        beforeEach(() => { consoleLog = jest.spyOn(console, 'log').mockImplementation(() => {}) })
-        afterEach(() => { consoleLog.mockRestore() })
-
-        test('bypasses update-electron-app and checks the feed directly, including the macos parameter', async () => {
-            load('12.7.6')
-            await createHttp().checkForUpdates()
-
-            expect(updateElectronApp).not.toHaveBeenCalled()
-            expect(originalSetFeedURL).toHaveBeenCalledWith({
-                url: `${HTTP_FEED}/RELEASES.json?macos=12.7.6`,
-                serverType: 'json'
-            })
-            expect(electron.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
-        })
-
-        test('https feeds still go through update-electron-app', async () => {
-            load('12.7.6')
-            await create().checkForUpdates()
-
-            expect(updateElectronApp).toHaveBeenCalledTimes(1)
-            expect(electron.autoUpdater.checkForUpdates).not.toHaveBeenCalled()
-        })
-
-        test('logs the outcome of the check, listeners are attached only once', async () => {
-            load('12.7.6')
-            const logger = { logEvent: jest.fn() }
-            await createHttp(logger).checkForUpdates()
-            await createHttp(logger).checkForUpdates()
-
-            const on = electron.autoUpdater.on
-            expect(on.mock.calls.map(c => c[0])).toEqual(
-                ['error', 'checking-for-update', 'update-available', 'update-not-available', 'update-downloaded'])
-
-            const onError = on.mock.calls.find(c => c[0] === 'error')[1]
-            onError(new Error('Could not get code signature for running application'))
-
-            expect(logger.logEvent).toHaveBeenCalledWith({
-                message: 'AutoUpdate Log',
-                log: 'error,Could not get code signature for running application'
-            })
-        })
-    })
-    // TEMPORARY: END
 })

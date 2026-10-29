@@ -68,8 +68,8 @@ class MessageQueueFeature extends Feature{
             Prom.add( 'mqtt.doConnect', this._doConnect())            
         }
         await Prom.exec('mqtt.doConnect')
-            
-            
+
+        return this.isConnected()
     }
 
     async _doConnect() {
@@ -98,8 +98,11 @@ class MessageQueueFeature extends Feature{
             this.connecting = false;
             this.connected = true
             this.retryCount = 0;
-            this.logger.logEvent( {message:`connected to mqtt broker ${this.broker}`});   
+            this.logger.logEvent( {message:`connected to mqtt broker ${this.broker}`});
             this.registerHandlers()
+
+            // a new client starts without any broker-side subscriptions
+            this.resetSubscriptionState()
         }
         catch(err) {
             if( this.retryCount<=1)
@@ -144,29 +147,49 @@ class MessageQueueFeature extends Feature{
         if (!topicInfo)
             return;
 
-        const {event,callId,subscribed} = topicInfo;
+        const {event,callId,subscribed,subscribing} = topicInfo;
 
-        if (subscribed)
+        // already subscribed, or a SUBSCRIBE for this topic is still waiting for its ack
+        if (subscribed || subscribing)
             return;
 
         if (MQ_DEBUG)
             this.logger.logEvent({message:'subscribing to',topic});
-        
-        this.client.subscribe(topic, (err)=>{
-            if (!err)  {                    
 
-                if (topicInfo) {
-                    if (MQ_DEBUG)
-                        this.logger.logEvent({message:'subscribed to',topic});
-                    topicInfo.subscribed = true;
+        topicInfo.subscribing = true;
+        const client = this.client;
+        client.subscribe(topic, (err)=>{
+            topicInfo.subscribing = false;
 
-                    ipcResponse(event.sender,'mq-subscribe',callId, true);
-                    this.sendEvent('mq-subscribed',topic);
+            if (!err)  {
+                // the topic was unsubscribed while this SUBSCRIBE was waiting for its ack -
+                // the broker now holds a subscription nobody asked for, so undo it
+                if (!this.subscriptions.some( (t)=> t.topic === topic)) {
+                    client.unsubscribe(topic, ()=>{});
+                    return;
                 }
+
+                if (MQ_DEBUG)
+                    this.logger.logEvent({message:'subscribed to',topic});
+                topicInfo.subscribed = true;
+
+                ipcResponse(event.sender,'mq-subscribe',callId, true);
+                this.sendEvent('mq-subscribed',topic);
                 return;
             }
-            this.logger.logEvent({message:`error subscribing topic ${topic} to mqtt broker`, error:err.message}) 
+            this.logger.logEvent({message:`error subscribing topic ${topic} to mqtt broker`, error:err.message})
         });
+    }
+
+    /**
+     * Subscriptions only exist on the broker for the lifetime of one client connection.
+     * Whenever the connection is lost or replaced, every topic needs to be subscribed again.
+     */
+    resetSubscriptionState() {
+        this.subscriptions.forEach( (t)=>{
+            t.subscribed = false;
+            t.subscribing = false;
+        })
     }
 
     unsubscribeTopic(topic) {
@@ -323,8 +346,16 @@ class MessageQueueFeature extends Feature{
         this.connected = false;
         this.logger.logEvent( {message:'mqtt connection closed', level:'debug'})
 
-        this.client.removeAllListeners()
-        this.client.on('error',()=>{})
+        this.resetSubscriptionState()
+
+        // keepAlive will create a new client, so this one must not keep reconnecting on its own
+        const client = this.client
+        client.removeAllListeners()
+        client.on('error',()=>{})
+        try {
+            client.end(true)
+        }
+        catch { /* ignore */ }
     }
 
     onDisconnect(packet)  {
@@ -391,7 +422,7 @@ class MessageQueueFeature extends Feature{
         }
 
         spec.registerFeatures( [
-            'mq','mq.unsubscribe-fix'
+            'mq','mq.unsubscribe-fix','mq.resubscribe-fix'
         ] )  
 
     }

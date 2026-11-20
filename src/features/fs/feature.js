@@ -99,7 +99,13 @@ class FileSystemSupport extends Feature{
         ipcSendEvent( 'fs-ws-message',id,event,...args);
     }
 
+    async stat(filePath) {
+        const s = await promiseFs.stat(filePath)
+        return { size: s.size }
+    }
+
     register( props) {
+        ipcHandle('fs-stat', this.stat.bind(this), ipcMain)
         ipcHandle('fs-write-file',promiseFs.writeFile,ipcMain)
         ipcHandle('fs-read-file',promiseFs.readFile,ipcMain)
         ipcHandle('fs-append-file',fs.appendFile,ipcMain)
@@ -142,7 +148,8 @@ class FileSystemSupport extends Feature{
     registerRenderer( spec, ipcRenderer) {
         spec.fs = {}
 
-        spec.fs.writeFile               = ipcCall('fs-write-file',ipcRenderer) 
+        spec.fs.stat                    = ipcCall('fs-stat',ipcRenderer)
+        spec.fs.writeFile               = ipcCall('fs-write-file',ipcRenderer)
         spec.fs.readFile                = ipcCall('fs-read-file',ipcRenderer) 
         spec.fs.appendFile              = ipcCall('fs-append-file',ipcRenderer) 
         spec.fs.access                  = ipcCall('fs-access',ipcRenderer) 
@@ -170,7 +177,7 @@ class FileSystemSupport extends Feature{
         spec.path.parse               = ipcCallSync('fs-path-parse',ipcRenderer) 
         spec.path.join                = ipcCallSync('fs-path-join',ipcRenderer) 
         spec.registerFeatures( [
-            'fileSystem','fileSystem.stream','fileSystem.unlink','fileSystem.readdir', 'fileSystem.access'
+            'fileSystem','fileSystem.stream','fileSystem.unlink','fileSystem.readdir', 'fileSystem.access', 'fileSystem.stat'
         ] )
 
     }

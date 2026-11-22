@@ -11,6 +11,7 @@
     "test:integration": "jest --config jest.integration.config.js",
     "test:all": "jest --config jest.integration.config.js && jest",
     "bletest": "node scripts/ble",
+    "g1": "node scripts/local-link-g1/run.js",
     "coverage": "jest --coverage",
     "app-test": "playwright test --workers 1",
     "start": "electron ./",

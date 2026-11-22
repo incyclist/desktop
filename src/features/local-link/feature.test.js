@@ -293,6 +293,39 @@ describe('LocalLinkFeature', () => {
             expect((await feature.getStatus()).announced).toBeNull()
         })
 
+        test('withdrawing sends the goodbye records (unpublishAll) before the sockets are closed', async () => {
+            await feature.announce(valid)
+            const bonjour = mockInstances[0]
+            const order = []
+            let finishGoodbye
+            bonjour.unpublishAll = jest.fn(cb => { order.push('goodbye'); finishGoodbye = cb })
+            bonjour.destroy = jest.fn(() => { order.push('destroy'); bonjour.destroyed = true })
+
+            const withdrawn = feature.withdraw()
+            expect(order).toEqual(['goodbye'])
+            expect(bonjour.destroyed).toBe(false)
+
+            finishGoodbye()
+            await withdrawn
+            expect(order).toEqual(['goodbye', 'destroy'])
+        })
+
+        test('a goodbye that never completes does not block the teardown', async () => {
+            jest.useFakeTimers()
+            try {
+                await feature.announce(valid)
+                const bonjour = mockInstances[0]
+                bonjour.unpublishAll = jest.fn()
+                const withdrawn = feature.withdraw()
+                await jest.advanceTimersByTimeAsync(1100)
+                await withdrawn
+                expect(bonjour.destroyed).toBe(true)
+            }
+            finally {
+                jest.useRealTimers()
+            }
+        })
+
         test('a new announcement replaces the previous one', async () => {
             await feature.announce(valid)
             await feature.announce({ ...valid, instanceName: 'Other (zz99)' })

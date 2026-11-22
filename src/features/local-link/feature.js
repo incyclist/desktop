@@ -17,6 +17,9 @@ const SERVICE_PROTOCOL = 'tcp'
 
 const NETWORK_POLL_MS = 5000
 
+// Upper bound for sending the mDNS goodbye records before the sockets are closed
+const GOODBYE_TIMEOUT_MS = 1000
+
 const MAX_INSTANCE_NAME_BYTES = 63
 const INSTANCE_NAME = /^[^\x00-\x1f\x7f]+$/u
 const HOST_LABEL = /^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/
@@ -117,7 +120,7 @@ class LocalLinkFeature extends Feature {
         const listener = opts?.listener
         if (!listener || listener === 'control') {
             // the announcement points at the control port, so it goes with the listener
-            this.withdraw()
+            await this.withdraw()
             await this.control.stop()
         }
         if (!listener || listener === 'media')
@@ -224,22 +227,52 @@ class LocalLinkFeature extends Feature {
         this.emitEvent({ type: 'announce-error', code })
     }
 
+    /**
+     * Tears the Bonjour instance down. destroy() alone only closes the sockets: the records stay cached
+     * on other browsers until their TTL ran out. unpublishAll() first sends the goodbye (TTL 0) records,
+     * so the entry disappears (and, for a reannounce, reappears) right away. Resolves once the goodbye
+     * is out, or after a short timeout.
+     */
     destroyBonjour() {
         const bonjour = this.bonjour
         this.bonjour = undefined
         this.service = undefined
-        try { bonjour?.destroy() } catch (err) {
-            this.logger.logEvent({ message: 'local-link bonjour destroy failed', error: err?.message })
-        }
+        if (!bonjour)
+            return Promise.resolve()
+
+        return new Promise(resolve => {
+            let done = false
+            let timer
+            const finish = () => {
+                if (done)
+                    return
+                done = true
+                clearTimeout(timer)
+                try { bonjour.destroy() } catch (err) {
+                    this.logger.logEvent({ message: 'local-link bonjour destroy failed', error: err?.message })
+                }
+                resolve()
+            }
+            timer = setTimeout(finish, GOODBYE_TIMEOUT_MS)
+            timer.unref?.()
+            try {
+                if (typeof bonjour.unpublishAll === 'function')
+                    bonjour.unpublishAll(finish)
+                else
+                    finish()
+            }
+            catch { finish() }
+        })
     }
 
-    /** Withdraws the announcement (goodbye packets are sent by the Bonjour teardown). */
+    /** Withdraws the announcement and sends the mDNS goodbye. The returned promise resolves once it is out. */
     withdraw() {
         const had = this.announcement !== undefined
         this.announcement = undefined
-        this.destroyBonjour()
+        const gone = this.destroyBonjour()
         if (had)
             this.logger.logEvent({ message: 'local-link announce withdrawn' })
+        return gone
     }
 
     /** Destroys and recreates the Bonjour instance, then publishes on the current interfaces. */
@@ -333,11 +366,12 @@ class LocalLinkFeature extends Feature {
     /** Quit hook: plain close/destroy only, so it cannot trigger the native-transport shutdown crash. */
     async shutdown() {
         this.stopWatcher()
-        this.withdraw()
+        const goodbye = this.withdraw()
         this.control.closeAll('quit')
         await this.control.stop()
         await this.media.stop()
         this.peerFilter.dispose()
+        await goodbye
     }
 
     // --- IPC wiring ---

@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
 const { Readable } = require('node:stream')
-const { normalizeAddress } = require('./peer-filter')
+const { peerKey } = require('./peer-filter')
 
 const LISTENER = 'media'
 
@@ -33,6 +33,13 @@ const EXTENSION_TYPES = {
     '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo', '.mpg': 'video/mpeg', '.mpeg': 'video/mpeg',
     '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif',
 }
+
+// Socket timeouts. The http.Server is never listen()ed (sockets are handed over from a net
+// server), so Node's own headers/request timeout checks never run and are enforced here.
+// HEADER: until the first complete request head is parsed. IDLE: afterwards; socket activity
+// (including writes of an active streaming response) resets it.
+const DEFAULT_HEADER_TIMEOUT_MS = 15000
+const DEFAULT_IDLE_TIMEOUT_MS = 60000
 
 const noopLogger = { logEvent: () => { /* no logging configured */ } }
 
@@ -155,9 +162,13 @@ class MediaServer {
      * @param {import('./peer-filter').PeerFilter} props.peerFilter
      * @param {{logEvent:Function}} [props.logger]         lifecycle and errors
      * @param {{logEvent:Function}} [props.requestLogger]  per-request logs (local file only)
+     * @param {number} [props.headerTimeoutMs]  max time for a peer to deliver a request head
+     * @param {number} [props.idleTimeoutMs]    inactivity timeout once a request head was received
      */
     constructor(props) {
         this.emit = props.emit
+        this.headerTimeoutMs = props.headerTimeoutMs ?? DEFAULT_HEADER_TIMEOUT_MS
+        this.idleTimeoutMs = props.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS
         this.peerFilter = props.peerFilter
         this.logger = props.logger ?? noopLogger
         this.requestLogger = props.requestLogger ?? noopLogger
@@ -171,6 +182,15 @@ class MediaServer {
         this.sockets = new Set()
         this.peerCounts = new Map()
         this.active = new Set()
+    }
+
+    /** Emits a transport event; a failing consumer (e.g. destroyed webContents) must not throw into a network handler. */
+    safeEmit(event) {
+        try {
+            this.emit(event)
+        } catch {
+            this.logger.logEvent({ message: 'local-link media emit failed', type: event?.type })
+        }
     }
 
     isRunning() {
@@ -215,6 +235,9 @@ class MediaServer {
 
         this.startPromise = new Promise(resolve => {
             const httpServer = http.createServer((req, res) => this.onRequest(req, res))
+            httpServer.headersTimeout = this.headerTimeoutMs
+            httpServer.requestTimeout = this.idleTimeoutMs
+            httpServer.keepAliveTimeout = this.headerTimeoutMs
             httpServer.on('clientError', (_err, socket) => {
                 if (socket.writable)
                     socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
@@ -230,7 +253,7 @@ class MediaServer {
             const onError = (err) => {
                 const code = err?.code ?? 'UNKNOWN'
                 this.logger.logEvent({ message: 'local-link media listen failed', code })
-                this.emit({ type: 'error', listener: LISTENER, phase: 'listen', code })
+                this.safeEmit({ type: 'error', listener: LISTENER, phase: 'listen', code })
                 resolve({ ok: false, error: { code } })
             }
 
@@ -240,14 +263,14 @@ class MediaServer {
                 netServer.on('error', err => {
                     const code = err?.code ?? 'UNKNOWN'
                     this.logger.logEvent({ message: 'local-link media listener error', code })
-                    this.emit({ type: 'error', listener: LISTENER, phase: 'runtime', code })
+                    this.safeEmit({ type: 'error', listener: LISTENER, phase: 'runtime', code })
                 })
 
                 this.netServer = netServer
                 this.httpServer = httpServer
                 this.port = netServer.address().port
                 this.logger.logEvent({ message: 'local-link media listener started', port: this.port })
-                this.emit({ type: 'started', listener: LISTENER, port: this.port })
+                this.safeEmit({ type: 'started', listener: LISTENER, port: this.port })
                 resolve({ ok: true, port: this.port })
             })
         }).finally(() => { this.startPromise = undefined })
@@ -273,14 +296,14 @@ class MediaServer {
 
         await new Promise(resolve => netServer.close(() => resolve()))
         this.logger.logEvent({ message: 'local-link media listener stopped' })
-        this.emit({ type: 'stopped', listener: LISTENER })
+        this.safeEmit({ type: 'stopped', listener: LISTENER })
     }
 
     onConnection(socket) {
         if (!this.peerFilter.guard(LISTENER, socket))
             return
 
-        const key = normalizeAddress(socket.remoteAddress)?.value.toString() ?? 'unknown'
+        const key = peerKey(socket.remoteAddress)
         const count = this.peerCounts.get(key) ?? 0
         if (count >= this.limits.maxPerPeer) {
             socket.destroy()
@@ -290,6 +313,7 @@ class MediaServer {
         this.peerCounts.set(key, count + 1)
         this.sockets.add(socket)
         socket.once('close', () => {
+            clearTimeout(socket.headDeadline)
             this.sockets.delete(socket)
             const left = (this.peerCounts.get(key) ?? 1) - 1
             if (left <= 0)
@@ -299,7 +323,21 @@ class MediaServer {
         })
         socket.on('error', () => { /* reported through close */ })
 
+        socket.setTimeout(this.headerTimeoutMs)
+        socket.on('timeout', () => socket.destroy())
+        this.armHeadDeadline(socket)
+
         this.httpServer?.emit('connection', socket)
+    }
+
+    /**
+     * Absolute deadline for a complete request head. socket.setTimeout alone is reset by every
+     * received byte, so a peer dripping header bytes would never be reaped.
+     */
+    armHeadDeadline(socket) {
+        clearTimeout(socket.headDeadline)
+        socket.headDeadline = setTimeout(() => socket.destroy(), this.headerTimeoutMs)
+        socket.headDeadline.unref?.()
     }
 
     /**
@@ -414,6 +452,20 @@ class MediaServer {
         const entry = { digest: undefined, streaming: false, abort: () => res.destroy() }
         this.active.add(entry)
 
+        // request head received: switch to the longer inactivity timeout while it is served,
+        // and expect the next request head within the header timeout again afterwards
+        const socket = req.socket
+        if (socket) {
+            clearTimeout(socket.headDeadline)
+            socket.setTimeout?.(this.idleTimeoutMs)
+            res.once('close', () => {
+                if (socket.destroyed)
+                    return
+                socket.setTimeout?.(this.headerTimeoutMs)
+                this.armHeadDeadline(socket)
+            })
+        }
+
         try {
             rec.completed = await this.route(req, res, rec, entry)
         }
@@ -429,7 +481,7 @@ class MediaServer {
             this.active.delete(entry)
         }
 
-        this.emit({
+        this.safeEmit({
             type: 'media-request', endpoint: rec.endpoint, handle: rec.handle, status: rec.status,
             tokenId: rec.tokenId, bytes: rec.bytes, completed: rec.completed
         })

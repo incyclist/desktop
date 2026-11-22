@@ -137,6 +137,75 @@ describe('ControlServer', () => {
         await until(() => received.closed)
     })
 
+    test('default inbound frame cap is 16 KB', async () => {
+        expect(server.setLimits({}).maxFrameBytes).toBe(16384)
+        const port = await startServer()
+        const { socket, received } = await connect(port)
+        const header = Buffer.alloc(4)
+        header.writeUInt32BE(16385)
+        socket.write(Buffer.concat([preamble(), header]))
+        await until(() => received.closed)
+        expect(ofType('frame')).toHaveLength(0)
+    })
+
+    test('a frame at the default cap is accepted', async () => {
+        const port = await startServer()
+        const { socket } = await handshake(port)
+        socket.write(frame('x'.repeat(16384)))
+        await until(() => ofType('frame').length === 1)
+    })
+
+    test('an emit that throws does not escape the network handlers', async () => {
+        const logs = []
+        const throwing = new ControlServer({
+            emit: () => { throw new Error('Object has been destroyed') },
+            peerFilter, logger: { logEvent: e => logs.push(e) }
+        })
+        const res = await throwing.start({ port: 0, host: '127.0.0.1' })
+        const uncaught = jest.fn()
+        process.on('uncaughtException', uncaught)
+        try {
+            const socket = net.connect({ port: res.port, host: '127.0.0.1' })
+            socket.on('error', () => { /* ignore */ })
+            sockets.push(socket)
+            await new Promise(r => socket.once('connect', r))
+            socket.write(Buffer.concat([preamble(), frame('hello')]))
+            await wait(100)
+            socket.destroy()
+            await wait(100)
+            expect(uncaught).not.toHaveBeenCalled()
+            expect(logs.some(l => l.message === 'local-link control emit failed')).toBe(true)
+            expect(JSON.stringify(logs)).not.toContain('127.0.0.1')
+            expect(JSON.stringify(logs)).not.toContain('hello')
+        }
+        finally {
+            process.off('uncaughtException', uncaught)
+            await throwing.stop()
+        }
+    })
+
+    test('per-peer count keys on the /64 for IPv6 peers', () => {
+        const mk = (address) => {
+            const handlers = {}
+            return {
+                remoteAddress: address, remotePort: 1, destroy: jest.fn(),
+                setNoDelay: jest.fn(), on: (e, f) => { handlers[e] = f }, once: (e, f) => { handlers[e] = f }
+            }
+        }
+        const open = new PeerFilter()
+        const srv = new ControlServer({ emit: () => { /* unused */ }, peerFilter: open })
+        srv.setLimits({ maxPerPeer: 2 })
+        const a = mk('fe80::1'), b = mk('fe80::2'), c = mk('fe80::3'), other = mk('fe80:0:0:1::1')
+        for (const s of [a, b, c, other])
+            srv.onConnection(s)
+        expect(c.destroy).toHaveBeenCalled()
+        expect(a.destroy).not.toHaveBeenCalled()
+        expect(b.destroy).not.toHaveBeenCalled()
+        expect(other.destroy).not.toHaveBeenCalled()
+        srv.closeAll('test')
+        open.dispose()
+    })
+
     test('clamps limits to the hard ceilings', () => {
         const applied = server.setLimits({
             maxConnections: 1e6, maxPerPeer: 1e6, preambleTimeoutMs: 1e9, idleTimeoutMs: 1e9,

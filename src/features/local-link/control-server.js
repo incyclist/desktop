@@ -1,6 +1,6 @@
 const net = require('node:net')
 const crypto = require('node:crypto')
-const { normalizeAddress } = require('./peer-filter')
+const { peerKey } = require('./peer-filter')
 
 const LISTENER = 'control'
 
@@ -20,7 +20,7 @@ const LIMITS = {
     maxPerPeer:        { default: 4,     ceiling: 16 },
     preambleTimeoutMs: { default: 5000,  ceiling: 30000 },
     idleTimeoutMs:     { default: 60000, ceiling: 600000 },
-    maxFrameBytes:     { default: 65536, ceiling: 1048576 },
+    maxFrameBytes:     { default: 16384, ceiling: 1048576 },
     maxFramesPerSec:   { default: 20,    ceiling: 200 },
 }
 
@@ -60,6 +60,15 @@ class ControlServer {
         this.connections = new Map()    // all sockets, by internal key
         this.established = new Map()    // connectionId -> connection (preamble accepted)
         this.peerCounts = new Map()
+    }
+
+    /** Emits a transport event; a failing consumer (e.g. destroyed webContents) must not throw into a network handler. */
+    safeEmit(event) {
+        try {
+            this.emit(event)
+        } catch {
+            this.logger.logEvent({ message: 'local-link control emit failed', type: event?.type })
+        }
     }
 
     isRunning() {
@@ -112,7 +121,7 @@ class ControlServer {
             const onError = (err) => {
                 const code = err?.code ?? 'UNKNOWN'
                 this.logger.logEvent({ message: 'local-link control listen failed', code })
-                this.emit({ type: 'error', listener: LISTENER, phase: 'listen', code })
+                this.safeEmit({ type: 'error', listener: LISTENER, phase: 'listen', code })
                 resolve({ ok: false, error: { code } })
             }
 
@@ -122,13 +131,13 @@ class ControlServer {
                 server.on('error', err => {
                     const code = err?.code ?? 'UNKNOWN'
                     this.logger.logEvent({ message: 'local-link control listener error', code })
-                    this.emit({ type: 'error', listener: LISTENER, phase: 'runtime', code })
+                    this.safeEmit({ type: 'error', listener: LISTENER, phase: 'runtime', code })
                 })
 
                 this.server = server
                 this.port = server.address().port
                 this.logger.logEvent({ message: 'local-link control listener started', port: this.port })
-                this.emit({ type: 'started', listener: LISTENER, port: this.port })
+                this.safeEmit({ type: 'started', listener: LISTENER, port: this.port })
                 resolve({ ok: true, port: this.port })
             })
         }).finally(() => { this.startPromise = undefined })
@@ -148,7 +157,7 @@ class ControlServer {
 
         await new Promise(resolve => server.close(() => resolve()))
         this.logger.logEvent({ message: 'local-link control listener stopped' })
-        this.emit({ type: 'stopped', listener: LISTENER })
+        this.safeEmit({ type: 'stopped', listener: LISTENER })
     }
 
     /** Destroys every connection (used on renderer reload/destroy, stop and quit). */
@@ -189,7 +198,7 @@ class ControlServer {
         if (!this.peerFilter.guard(LISTENER, socket))
             return
 
-        const key = normalizeAddress(socket.remoteAddress)?.value.toString() ?? 'unknown'
+        const key = peerKey(socket.remoteAddress)
         const count = this.peerCounts.get(key) ?? 0
         if (count >= this.limits.maxPerPeer) {
             socket.destroy()
@@ -271,7 +280,7 @@ class ControlServer {
 
         conn.socket.write(Buffer.concat([MAGIC, Buffer.from([accepted])]))
         this.requestLogger.logEvent({ message: 'local-link control connection accepted', framingVersion: accepted })
-        this.emit({ type: 'connection', connectionId: conn.id, peer: { ...conn.peer } })
+        this.safeEmit({ type: 'connection', connectionId: conn.id, peer: { ...conn.peer } })
         return true
     }
 
@@ -293,7 +302,7 @@ class ControlServer {
             const payload = conn.buffer.subarray(HEADER_LENGTH, HEADER_LENGTH + length).toString('utf8')
             conn.buffer = conn.buffer.subarray(HEADER_LENGTH + length)
             conn.frames++
-            this.emit({ type: 'frame', connectionId: conn.id, payload })
+            this.safeEmit({ type: 'frame', connectionId: conn.id, payload })
         }
     }
 
@@ -348,7 +357,7 @@ class ControlServer {
         this.established.delete(conn.id)
         const reason = conn.reason ?? 'peer-closed'
         this.requestLogger.logEvent({ message: 'local-link control connection closed', reason, frames: conn.frames })
-        this.emit({ type: 'connection-closed', connectionId: conn.id, reason })
+        this.safeEmit({ type: 'connection-closed', connectionId: conn.id, reason })
     }
 }
 

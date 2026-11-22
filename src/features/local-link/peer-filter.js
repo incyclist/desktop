@@ -142,6 +142,19 @@ function classifyAddress(address) {
     return 'public-v6'
 }
 
+/**
+ * Key for per-peer connection counting. IPv6 addresses collapse to their /64 prefix (a single
+ * host can cycle through a whole /64); IPv4 and IPv4-mapped addresses use the full address.
+ */
+function peerKey(address) {
+    const addr = normalizeAddress(address)
+    if (!addr)
+        return 'unknown'
+    if (addr.family === 4)
+        return addr.value.toString()
+    return `v6:${(addr.value >> 64n).toString()}`
+}
+
 /** True if the address is in the default accept ranges (private, link-local, loopback). */
 function isPrivateAddress(address) {
     const addr = normalizeAddress(address)
@@ -250,4 +263,4 @@ class PeerFilter {
     }
 }
 
-module.exports = { PeerFilter, isPrivateAddress, normalizeAddress, parseCidr, classifyAddress, DEFAULT_RANGES }
+module.exports = { PeerFilter, isPrivateAddress, normalizeAddress, peerKey, parseCidr, classifyAddress, DEFAULT_RANGES }

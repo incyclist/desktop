@@ -1,4 +1,4 @@
-const { PeerFilter, normalizeAddress, parseCidr, classifyAddress, isPrivateAddress } = require('./peer-filter')
+const { PeerFilter, peerKey, normalizeAddress, parseCidr, classifyAddress, isPrivateAddress } = require('./peer-filter')
 
 describe('normalizeAddress', () => {
     test('maps IPv4-mapped IPv6 to IPv4', () => {
@@ -158,5 +158,24 @@ describe('guard', () => {
         finally {
             jest.useRealTimers()
         }
+    })
+})
+
+describe('peerKey', () => {
+    test('IPv6 addresses in the same /64 share a key, other /64s differ', () => {
+        expect(peerKey('fe80::1')).toBe(peerKey('fe80::ffff:1:2:3'))
+        expect(peerKey('2001:db8:0:1::1')).toBe(peerKey('2001:db8:0:1:aaaa:bbbb:cccc:dddd'))
+        expect(peerKey('2001:db8:0:1::1')).not.toBe(peerKey('2001:db8:0:2::1'))
+    })
+    test('zone ids are ignored', () => {
+        expect(peerKey('fe80::1%eth0')).toBe(peerKey('fe80::2'))
+    })
+    test('IPv4 uses the full address and IPv4-mapped equals plain IPv4', () => {
+        expect(peerKey('192.168.1.5')).not.toBe(peerKey('192.168.1.6'))
+        expect(peerKey('::ffff:192.168.1.5')).toBe(peerKey('192.168.1.5'))
+    })
+    test('unparsable address maps to unknown', () => {
+        expect(peerKey(undefined)).toBe('unknown')
+        expect(peerKey('nonsense')).toBe('unknown')
     })
 })

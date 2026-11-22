@@ -3,6 +3,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const crypto = require('node:crypto')
+const net = require('node:net')
 const { MediaServer, parseRange } = require('./media-server')
 const { PeerFilter } = require('./peer-filter')
 
@@ -60,6 +61,111 @@ describe('MediaServer', () => {
 
     afterEach(async () => {
         await server.stop()
+    })
+
+    describe('socket timeouts and robustness', () => {
+        let quick, quickPort
+
+        beforeEach(async () => {
+            quick = new MediaServer({
+                emit: () => { /* unused */ }, peerFilter: new PeerFilter({ flushIntervalMs: 100000 }),
+                headerTimeoutMs: 150, idleTimeoutMs: 400
+            })
+            quickPort = (await quick.start({ port: 0, host: '127.0.0.1' })).port
+            quick.publish({
+                handles: [{ handle: 'abc123', path: filePath }],
+                tokens: [{ digest: digestOf(TOKEN), id: 'tok-1' }],
+            })
+        })
+        afterEach(async () => { await quick.stop() })
+
+        const closeOf = (socket) => new Promise(resolve => {
+            socket.on('error', () => { /* checked via close */ })
+            socket.once('close', () => resolve(Date.now()))
+        })
+
+        test('an idle socket is destroyed after the header timeout', async () => {
+            const socket = net.connect({ port: quickPort, host: '127.0.0.1' })
+            const start = Date.now()
+            const closedAt = await closeOf(socket)
+            expect(closedAt - start).toBeLessThan(2000)
+        })
+
+        test('a socket that sent only part of the request head is destroyed', async () => {
+            const socket = net.connect({ port: quickPort, host: '127.0.0.1' })
+            await new Promise(r => socket.once('connect', r))
+            socket.write('GET /v/abc123 HTTP/1.1\r\nHost: x\r\n')
+            const closedAt = await closeOf(socket)
+            expect(closedAt).toBeGreaterThan(0)
+            expect(socket.destroyed).toBe(true)
+        })
+
+        test('a slow-dripping head is destroyed despite ongoing byte activity', async () => {
+            const socket = net.connect({ port: quickPort, host: '127.0.0.1' })
+            await new Promise(r => socket.once('connect', r))
+            const drip = setInterval(() => { if (!socket.destroyed) socket.write('X-A: b\r\n') }, 40)
+            try {
+                const start = Date.now()
+                const closedAt = await Promise.race([closeOf(socket), new Promise(r => setTimeout(() => r(-1), 3000))])
+                expect(closedAt).not.toBe(-1)
+                expect(closedAt - start).toBeLessThan(1500)
+            }
+            finally {
+                clearInterval(drip)
+                socket.destroy()
+            }
+        })
+
+        test('a normal request on a fresh socket still works', async () => {
+            const res = await request(quickPort, '/v/abc123')
+            expect(res.status).toBe(200)
+            expect(res.body.equals(content)).toBe(true)
+        })
+
+        test('an idle keep-alive socket is reaped after a completed request', async () => {
+            const socket = net.connect({ port: quickPort, host: '127.0.0.1' })
+            await new Promise(r => socket.once('connect', r))
+            socket.resume()
+            socket.write(`GET /v/abc123 HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer ${TOKEN}\r\n\r\n`)
+            const closedAt = await closeOf(socket)
+            expect(closedAt).toBeGreaterThan(0)
+        })
+
+        test('a throwing emit does not break request handling', async () => {
+            const logs = []
+            const bad = new MediaServer({
+                emit: () => { throw new Error('Object has been destroyed') },
+                peerFilter: new PeerFilter({ flushIntervalMs: 100000 }), logger: { logEvent: e => logs.push(e) }
+            })
+            const p = (await bad.start({ port: 0, host: '127.0.0.1' })).port
+            const uncaught = jest.fn()
+            process.on('unhandledRejection', uncaught)
+            try {
+                bad.publish({ tokens: [{ digest: digestOf(TOKEN), id: 'tok-1' }] })
+                const res = await request(p, '/nothing')
+                expect(res.status).toBe(404)
+                await new Promise(r => setTimeout(r, 50))
+                expect(uncaught).not.toHaveBeenCalled()
+                expect(logs.some(l => l.message === 'local-link media emit failed')).toBe(true)
+            }
+            finally {
+                process.off('unhandledRejection', uncaught)
+                await bad.stop()
+            }
+        })
+
+        test('per-peer count keys on the /64 for IPv6 peers', () => {
+            const mk = (address) => ({ remoteAddress: address, destroy: jest.fn(), once: jest.fn(), on: jest.fn(), setTimeout: jest.fn() })
+            const srv = new MediaServer({ emit: () => { /* unused */ }, peerFilter: new PeerFilter() })
+            srv.setLimits({ maxPerPeer: 2 })
+            const a = mk('fe80::1'), b = mk('fe80::2'), c = mk('fe80::3'), other = mk('fe80:0:0:1::1')
+            for (const s of [a, b, c, other])
+                srv.onConnection(s)
+            expect(c.destroy).toHaveBeenCalled()
+            expect(a.destroy).not.toHaveBeenCalled()
+            expect(b.destroy).not.toHaveBeenCalled()
+            expect(other.destroy).not.toHaveBeenCalled()
+        })
     })
 
     describe('lifecycle', () => {

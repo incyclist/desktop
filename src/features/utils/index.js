@@ -229,6 +229,22 @@ function ipcRegisterBroadcast( api, ipcEvent,ipcRenderer) {
 }
 
 
+/**
+ * Renderer side: returns a subscribe function for a broadcast event channel. Each call
+ * registers one listener and returns a function that removes just that listener.
+ */
+function ipcSubscribe( ipcEvent, ipcRenderer) {
+    return (callback) => {
+        if (typeof callback !== 'function')
+            return () => {}
+
+        const onEvent = (_ipcEventInfo, ...args) => callback(...args)
+        ipcRenderer.on( ipcEvent, onEvent)
+        return () => { ipcRenderer.removeListener( ipcEvent, onEvent) }
+    }
+}
+
+
 function ipcSendEvent( event, ...args) {
     if (process.env.IPC_DEBUG)
         console.log(`ipcBroadcast: ${event} `)
@@ -324,7 +340,7 @@ function getCpuInfo() {
 
 
 module.exports = {
-    getFileInfo, serveFile, ipcCall,ipcCallSync, ipcCallNoResponse, ipcHandle, ipcHandleSync, ipcHandleNoResponse, ipcRegisterBroadcast, ipcServe,ipcServeSync,ipcSendEvent, ipcResponse,isTrue,getCpuInfo,
+    getFileInfo, serveFile, ipcCall,ipcCallSync, ipcCallNoResponse, ipcHandle, ipcHandleSync, ipcHandleNoResponse, ipcRegisterBroadcast, ipcSubscribe, ipcServe,ipcServeSync,ipcSendEvent, ipcResponse,isTrue,getCpuInfo,
     isTrue   
     
 };

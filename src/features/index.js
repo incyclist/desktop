@@ -18,6 +18,7 @@ const Logging = require('./logging').getInstance()
 const DirectConnect = require('./direct-connect').getInstance()
 const Crypto = require('./crypto').getInstance()
 const Fetch = require('./fetch').getInstance()
+const LocalLink = require('./local-link').getInstance()
 const {ObserverHandler} = require('./utils/observer')
 
 function initFeaturesApp( props ) {
@@ -44,6 +45,7 @@ function initFeaturesApp( props ) {
     DirectConnect.register(props);
     Crypto.register(props);
     Fetch.register(props);
+    LocalLink.register(props);
 
 }
 
@@ -84,6 +86,7 @@ function initFeaturesWeb( electron,ipcRenderer) {
     Logging.registerRenderer(electron,ipcRenderer);
     DirectConnect.registerRenderer(electron,ipcRenderer);
     Fetch.registerRenderer(electron,ipcRenderer);
+    LocalLink.registerRenderer(electron,ipcRenderer);
 
 
     electron.skipInstallUpdate = ()=> {

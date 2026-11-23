@@ -35,6 +35,50 @@ function buildCandidates(allParts) {
     return candidates
 }
 
+// entry -> indices of the names it matches
+function buildMatching(candidates, realNames) {
+    const matching = new Map()
+    for (const entry of candidates.keys()) matching.set(entry, [])
+    realNames.forEach((r, i) => {
+        for (const entry of candidates.keys()) {
+            if ([...r.parts].some(p => matchesPart(entry, p))) matching.get(entry).push(i)
+        }
+    })
+    return matching
+}
+
+// more users first. On a tie: an exact part before a family; among exact parts the longer one (the brand, not a model
+// word that occurs everywhere); among families the shorter prefix ("bkool*" rather than "bkoolsmart*": the same users,
+// but the brand); then alphabetical, so that the result is stable
+function isBetter(a, b) {
+    if (a.users !== b.users) return a.users > b.users
+    const aFamily = a.entry.endsWith('*')
+    const bFamily = b.entry.endsWith('*')
+    if (aFamily !== bFamily) return !aFamily
+    if (a.entry.length !== b.entry.length) return aFamily ? a.entry.length < b.entry.length : a.entry.length > b.entry.length
+    return a.entry < b.entry
+}
+
+// the entry that covers the most users that are not covered yet
+function findBest(matching, realNames, uncovered) {
+    let best
+    for (const [entry, indices] of matching) {
+        let users = 0
+        for (const i of indices) if (uncovered.has(i)) users += realNames[i].users
+        if (users > 0 && (!best || isBetter({ entry, users }, best))) best = { entry, users }
+    }
+    return best
+}
+
+// the indices of the names that nothing covers yet: all, except those that the current list covers already
+function findUncovered(real, isCovered) {
+    const uncovered = new Set(real.keys())
+    if (isCovered) {
+        for (const i of uncovered) if (isCovered(real[i].name)) uncovered.delete(i)
+    }
+    return uncovered
+}
+
 /**
  * Picks the name parts that identify the trainers and sensors users ride with.
  *
@@ -51,51 +95,22 @@ function buildKnownParts(real, options = {}) {
     const { maxParts, minUsers } = { ...DEFAULTS, ...options }
 
     const realNames = real.map(r => ({ parts: new Set(nameParts(r.name)), users: r.users ?? 1 }))
-
-    const allParts = new Set()
-    for (const r of realNames) for (const p of r.parts) allParts.add(p)
+    const allParts = new Set(realNames.flatMap(r => [...r.parts]))
     const candidates = buildCandidates(allParts)
+    const matching = buildMatching(candidates, realNames)
+    const uncovered = findUncovered(real, options.isCovered)
 
-    // entry -> indices of the names it matches
-    const matching = new Map()
-    for (const [entry] of candidates) matching.set(entry, [])
-    realNames.forEach((r, i) => {
-        for (const entry of candidates.keys()) {
-            if ([...r.parts].some(p => matchesPart(entry, p))) matching.get(entry).push(i)
-        }
-    })
-
-    // more users first. On a tie: an exact part before a family; among exact parts the longer one (the brand, not a
-    // model word that occurs everywhere); among families the shorter prefix ("bkool*" rather than "bkoolsmart*": the
-    // same users, but the brand); then alphabetical, so that the result is stable
-    const isBetter = (a, b) => {
-        if (a.users !== b.users) return a.users > b.users
-        const aFamily = a.entry.endsWith('*'), bFamily = b.entry.endsWith('*')
-        if (aFamily !== bFamily) return !aFamily
-        if (a.entry.length !== b.entry.length) return aFamily ? a.entry.length < b.entry.length : a.entry.length > b.entry.length
-        return a.entry < b.entry
-    }
-
-    const uncovered = new Set(realNames.keys())
-    if (options.isCovered) {
-        for (const i of [...uncovered]) if (options.isCovered(real[i].name)) uncovered.delete(i)
-    }
     const picked = []
     let coveredUsers = 0
 
     while (picked.length < maxParts) {
-        let best
-        for (const [entry, indices] of matching) {
-            let users = 0
-            for (const i of indices) if (uncovered.has(i)) users += realNames[i].users
-            if (users > 0 && (!best || isBetter({ entry, users }, best))) best = { entry, users }
-        }
+        const best = findBest(matching, realNames, uncovered)
         if (!best || best.users < minUsers) break
 
         coveredUsers += best.users
         picked.push({
             part: best.entry, users: best.users, names: matching.get(best.entry).length, coveredUsers,
-            members: [...candidates.get(best.entry)].sort(),
+            members: [...candidates.get(best.entry)].sort((a, b) => a.localeCompare(b)),
         })
         for (const i of matching.get(best.entry)) uncovered.delete(i)
     }
@@ -131,7 +146,7 @@ function buildSuggestions(real, options) {
         stale,
         total,
         coveredNow,
-        coveredWithSuggestions: coveredNow + (picked.length ? picked[picked.length - 1].coveredUsers : 0),
+        coveredWithSuggestions: coveredNow + (picked.at(-1)?.coveredUsers ?? 0),
     }
 }
 

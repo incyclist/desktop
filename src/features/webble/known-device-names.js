@@ -45,12 +45,13 @@ function nameParts(name) {
 
 // "assiomapro09885l" -> "assiomapro", "d2ride2121" -> "d2ride": everything from a run of 4+ digits on is a serial number
 function cutSerialNumber(part) {
-    return part.replace(/[0-9]{4,}.*$/, '')
+    const start = part.search(/\d{4}/)
+    return start < 0 ? part : part.slice(0, start)
 }
 
 // a purely numeric part, or one that only consists of hex digits and contains a digit, is part of a serial number
 function isDeviceId(part) {
-    return /^[0-9]+$/.test(part) || (/^[0-9a-f]+$/.test(part) && /[0-9]/.test(part))
+    return /^\d+$/.test(part) || (/^[\da-f]+$/.test(part) && /\d/.test(part))
 }
 
 function buildEntries(list) {

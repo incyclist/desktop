@@ -29,9 +29,11 @@ function parseList(text) {
         return { version: json.version, names: json.names }
     }
     const version = /version:\s*(\d+)/.exec(text)?.[1]
-    const block = /names:\s*\[([\s\S]*?)\n\s*\]/.exec(text)?.[1]
-    if (!version || block === undefined)
+    const open = text.indexOf('[', Math.max(0, text.indexOf('names:')))
+    const close = open < 0 ? -1 : text.indexOf(']', open)
+    if (!version || text.indexOf('names:') < 0 || close < 0)
         throw new Error('no list of known device names found (expected "version: <n>" and "names: [...]")')
+    const block = text.slice(open + 1, close)
     return { version: Number(version), names: [...block.matchAll(/'([a-z0-9*]+)'/g)].map(m => m[1]) }
 }
 
@@ -74,6 +76,14 @@ async function namesWithUsers(esUrl, days, message, field, extraFilter = []) {
     return res.aggregations.names.buckets.map(b => ({ name: b.key, users: b.users.value }))
 }
 
+// the members of a family, to see what an entry like "bkool*" would match
+function describeFamily(suggestion) {
+    if (!suggestion.part.endsWith('*'))
+        return ''
+    const more = suggestion.members.length > 6 ? ' ...' : ''
+    return `  (${suggestion.members.slice(0, 6).join(' ')}${more})`
+}
+
 const pct = (part, total) => `${Math.round(100 * part / Math.max(1, total))}%`
 
 async function main() {
@@ -89,7 +99,7 @@ async function main() {
     })
 
     console.log(`${real.length} different device names connected fine in the last ${args.days} days`)
-    console.log(`the list (version ${list.version}, ${entries.length} entries, ${path.basename(args.list)}) covers ${pct(result.coveredNow, result.total)} of the users; with all suggestions ${pct(result.coveredWithSuggestions, result.total)}`)
+    console.log(`the list (version ${list.version}, ${entries.length} entries) covers ${pct(result.coveredNow, result.total)} of the users; with all suggestions ${pct(result.coveredWithSuggestions, result.total)}`)
 
     const table = buildPartTable(real, {
         entries, isCovered,
@@ -104,8 +114,7 @@ async function main() {
 
     console.log(`\nSuggested to add (${result.suggestions.length}), most useful first, with example names:`)
     for (const s of result.suggestions) {
-        const family = s.part.endsWith('*') ? `  (${s.members.slice(0, 6).join(' ')}${s.members.length > 6 ? ' ...' : ''})` : ''
-        console.log(`  ${s.part.padEnd(15)} +${String(s.users).padEnd(4)} users   ${s.examples.join(' | ')}${family}`)
+        console.log(`  ${s.part.padEnd(15)} +${String(s.users).padEnd(4)} users   ${s.examples.join(' | ')}${describeFamily(s)}`)
     }
     console.log('  (generic words such as "bike" or "sensor" can show up here: skip them)')
 
@@ -114,7 +123,7 @@ async function main() {
         console.log('  ' + result.stale.join(' '))
     }
     console.log('  (an entry ending with * is a family: it matches every part that starts with it)')
-    console.log(`\nNothing was changed. Edit ${args.list} by hand and increase its version.`)
+    console.log('\nNothing was changed. Edit the list in incyclist-services by hand and increase its version.')
 }
 
 if (require.main === module)

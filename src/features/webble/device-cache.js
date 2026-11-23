@@ -10,10 +10,12 @@ const FILE_NAME = 'webble-devices.json'
 const BAD_THRESHOLD = 3
 
 // A blacklisting is permanent: noise (speakers, TVs, smart home devices) is around all the time and would otherwise
-// be probed again and again, which costs scan time and disturbs the connections that are in use. The protection of
-// real trainers and sensors is the list of known name parts (known-device-names.json): a device whose name contains
-// one of them is never blacklisted, and an older blacklisting of such a device is ignored. A trainer of a brand that
-// is not on the list yet can be released by deleting its entry (or the file) and by extending the list.
+// be probed again and again, which costs scan time and disturbs the connections that are in use. Real trainers and
+// sensors are protected from the one thing that is not definitive: a device that merely did not respond (busy, out of
+// reach, not yet ready) is never put on the failed list when its name contains a part of known-device-names.json,
+// and an older blacklisting caused by failed connects is ignored. A device that connects and reports that it is not
+// a fitness device ("unsupported") is blacklisted, whatever its name. A trainer of a brand that is not on the list
+// yet can be released by deleting its entry (or the file) and by extending the list.
 
 // Devices that advertise under rotating random addresses create a new entry for every address, none of which
 // ever reaches BAD_THRESHOLD. The name is the stable key: once this many different addresses with the same
@@ -111,14 +113,17 @@ class WebBleDeviceCache {
 
     isBad(mac) {
         const entry = this.entries[mac]
-        // the name of a known trainer or sensor wins over an (older) blacklisting
-        return entry?.status === 'bad' && !isKnownDeviceName(entry.name)
+        if (entry?.status !== 'bad') return false
+        // a known trainer or sensor is only blacklisted if it said it is not a fitness device. Older entries do not
+        // tell why they were made: they count as "did not respond", and a device that really is unsupported is
+        // blacklisted again by its next probe
+        return !isKnownDeviceName(entry.name) || entry.reason === 'unsupported'
     }
 
     /**
      * True if several different addresses with this name failed and none with that name ever worked: the
      * signature of a device that advertises under rotating addresses (speakers, earbuds, TVs). Never true for the
-     * name of a known trainer or sensor.
+     * name of a known trainer or sensor: one unresponsive or unsupported KICKR must not hide the others.
      */
     isNameBad(name) {
         if (!name || isKnownDeviceName(name)) return false
@@ -139,7 +144,7 @@ class WebBleDeviceCache {
      * recordFailure() does. Still never downgrades an explicitly-wanted device.
      */
     markBad(mac, name) {
-        if (!mac || this.isGood(mac) || isKnownDeviceName(name)) return
+        if (!mac || this.isGood(mac)) return
         this.entries[mac] = { name, status: 'bad', failCount: this.entries[mac]?.failCount ?? BAD_THRESHOLD, ts: Date.now(), reason: 'unsupported' }
         this.logger.logEvent({ message: 'webble device cache: marked bad (unsupported device type)', deviceId: mac, name })
         this._prune()

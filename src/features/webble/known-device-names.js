@@ -2,12 +2,12 @@ const data = require('./known-device-names.json')
 
 /**
  * Parts of the advertised names of the trainers and sensors our users ride with (e.g. "kickr", "tacx",
- * "vanrysel"). A device whose name contains such a part is never banned: not by the persisted blacklist, not by the
- * name cooldown. See scripts/known-device-names/README.md for how the list is maintained.
+ * "vanrysel"). A device whose name contains such a part is never put on the failed list just because it did not
+ * respond (not by the persisted blacklist, not by the name cooldown). It is still blacklisted when it connects and
+ * reports that it is not a fitness device.
  *
- *  - manual:    written by hand, never touched by the generator
- *  - exclude:   parts that must never be on the list (the generator drops them, too generic)
- *  - generated: written by scripts/known-device-names/update.js from the devices users really started
+ * The list (known-device-names.json) is maintained by hand. scripts/known-device-names/suggest.js proposes
+ * additions from the event log, it never changes the file. See scripts/known-device-names/README.md.
  */
 
 const MIN_PREFIX_LENGTH = 5
@@ -37,9 +37,7 @@ function isDeviceId(part) {
 }
 
 function buildEntries(list = data) {
-    const exclude = new Set((list.exclude ?? []).map(e => e.toLowerCase()))
-    const all = [...(list.manual ?? []), ...(list.generated ?? [])].map(e => e.toLowerCase())
-    return [...new Set(all)].filter(e => !exclude.has(e))
+    return [...new Set(list.map(e => e.toLowerCase()))]
 }
 
 const ENTRIES = buildEntries()

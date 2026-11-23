@@ -238,7 +238,7 @@ describe('WebBleDeviceCache — a blacklisting is permanent', () => {
     })
 })
 
-describe('WebBleDeviceCache — known trainer and sensor names are never banned', () => {
+describe('WebBleDeviceCache — known trainer and sensor names are protected from "did not respond"', () => {
 
     const load = (entries) => {
         fs.existsSync.mockReturnValue(true)
@@ -246,39 +246,49 @@ describe('WebBleDeviceCache — known trainer and sensor names are never banned'
         return new WebBleDeviceCache()
     }
 
-    test('a device with a known name is not blacklisted, whatever happens to it', () => {
+    test('a device with a known name is never put on the failed list because it did not respond', () => {
         const cache = new WebBleDeviceCache()
-        cache.markBad('aa', 'KnownTrainer 1234')
-        for (let i = 0; i < 5; i++) cache.recordFailure('bb', 'KnownTrainer 5678')
+        for (let i = 0; i < 5; i++) cache.recordFailure('aa', 'KnownTrainer 1234')
 
         expect(cache.isBad('aa')).toBe(false)
-        expect(cache.isBad('bb')).toBe(false)
         expect(cache.entries.aa).toBeUndefined()
-        expect(cache.entries.bb).toBeUndefined()
     })
 
-    test('an earlier blacklisting of a device with a known name is ignored: a wrongly banned trainer is released by a list update', () => {
+    test('a device with a known name that reports "unsupported" is still blacklisted', () => {
+        const cache = new WebBleDeviceCache()
+        cache.markBad('aa', 'KnownTrainer 1234')
+
+        expect(cache.isBad('aa')).toBe(true)
+        expect(cache.entries.aa.reason).toBe('unsupported')
+    })
+
+    test('an older blacklisting after failed connects is ignored for a known name: the device is probed again', () => {
         const cache = load({
-            wrong: { name: 'KnownTrainer 1234', status: 'bad', failCount: 3, reason: 'unsupported', ts: Date.now() - 30 * DAY },
-            noise: { name: 'JBL PartyBox', status: 'bad', failCount: 3, reason: 'unsupported', ts: Date.now() - 30 * DAY },
+            failed: { name: 'KnownTrainer 1', status: 'bad', failCount: 3, reason: 'failures', ts: 1 },
+            legacy: { name: 'KnownTrainer 2', status: 'bad', failCount: 3 },
+            unsupported: { name: 'KnownTrainer 3', status: 'bad', failCount: 3, reason: 'unsupported', ts: 1 },
         })
-        expect(cache.isBad('wrong')).toBe(false)
-        expect(cache.isBad('noise')).toBe(true)
+        expect(cache.isBad('failed')).toBe(false)
+        expect(cache.isBad('legacy')).toBe(false)
+        expect(cache.isBad('unsupported')).toBe(true)
     })
 
-    test('the name verdict never applies to a known name', () => {
-        const cache = load({
-            a1: { name: 'KnownTrainer', status: 'bad', failCount: 3, ts: 1 },
-            a2: { name: 'KnownTrainer', status: 'bad', failCount: 3, ts: 2 },
-            a3: { name: 'KnownTrainer', status: 'bad', failCount: 3, ts: 3 },
-        })
-        expect(cache.isNameBad('KnownTrainer')).toBe(false)
-    })
-
-    test('other names are treated as before', () => {
+    test('other names are blacklisted for both reasons, as before', () => {
         const cache = new WebBleDeviceCache()
         cache.markBad('aa', 'JBL PartyBox')
+        for (let i = 0; i < 3; i++) cache.recordFailure('bb', 'Free Home')
+
         expect(cache.isBad('aa')).toBe(true)
+        expect(cache.isBad('bb')).toBe(true)
+    })
+
+    test('the name verdict never applies to a known name: one unsupported KICKR must not hide the others', () => {
+        const cache = load({
+            a1: { name: 'KnownTrainer', status: 'bad', failCount: 3, reason: 'unsupported', ts: 1 },
+            a2: { name: 'KnownTrainer', status: 'bad', failCount: 3, reason: 'unsupported', ts: 2 },
+            a3: { name: 'KnownTrainer', status: 'bad', failCount: 3, reason: 'unsupported', ts: 3 },
+        })
+        expect(cache.isNameBad('KnownTrainer')).toBe(false)
     })
 })
 

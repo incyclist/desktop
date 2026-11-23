@@ -230,10 +230,11 @@ spec.registerFeatures(['myfeature', 'myfeature-v2'])
 
 ## WebBLE device blacklist and known device names
 
-WebBLE (Linux) probes every named device in the chooser. Devices that connect but offer no fitness service, or never
-answer, are blacklisted for good in `webble-devices.json` (app directory); devices that advertise under rotating
-addresses (speakers, TVs) are blacklisted by name. The names of real trainers and sensors are protected by
-`src/features/webble/known-device-names.json` and must never be blacklisted: see
+WebBLE (Linux) probes every named device in the chooser. Devices that connect but offer no fitness service
+("unsupported") or that never answer are blacklisted for good in `webble-devices.json` (app directory); devices that
+advertise under rotating addresses (speakers, TVs) are blacklisted by name. A hand-maintained list of name parts of
+real trainers and sensors, `src/features/webble/known-device-names.json`, protects them from being blacklisted just
+because they did not respond (they are still blacklisted when they report "unsupported"). See
 `scripts/known-device-names/README.md`. When touching the blacklist or the chooser logic, keep that guarantee.
 
 ## Electron Security Configuration

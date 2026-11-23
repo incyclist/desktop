@@ -51,21 +51,24 @@ describe('isKnownDeviceName (entries given)', () => {
 })
 
 describe('buildEntries', () => {
-    test('merges manual and generated parts, lower case, without duplicates and without excluded parts', () => {
-        expect(buildEntries({ manual: ['Tacx', 'volt'], generated: ['tacx', 'kickr', 'bike'], exclude: ['BIKE'] }).sort())
-            .toEqual(['kickr', 'tacx', 'volt'])
+    test('lower case, without duplicates', () => {
+        expect(buildEntries(['Tacx', 'volt', 'TACX', 'Kickr']).sort()).toEqual(['kickr', 'tacx', 'volt'])
     })
 })
 
 describe('the list that is shipped', () => {
-    test('is well formed', () => {
-        for (const list of [data.manual, data.generated, data.exclude]) {
-            expect(Array.isArray(list)).toBe(true)
-            for (const entry of list) {
-                expect(entry).toBe(entry.toLowerCase())
-                expect(entry.length).toBeGreaterThanOrEqual(3)
-            }
+    test('is a list of lower case parts of at least 3 characters, without duplicates', () => {
+        expect(Array.isArray(data)).toBe(true)
+        for (const entry of data) {
+            expect(entry).toBe(entry.toLowerCase())
+            expect(entry.length).toBeGreaterThanOrEqual(3)
+            expect(entry).toMatch(/^[a-z0-9]+$/)
         }
+        expect(new Set(data).size).toBe(data.length)
+    })
+
+    test('is sorted, so that a change shows up clearly in a review', () => {
+        expect([...data]).toEqual([...data].sort())
     })
 
     test('contains the parts the maintainers asked for', () => {

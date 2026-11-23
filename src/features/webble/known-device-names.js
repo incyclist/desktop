@@ -10,8 +10,6 @@ const data = require('./known-device-names.json')
  * additions from the event log, it never changes the file. See scripts/known-device-names/README.md.
  */
 
-const MIN_PREFIX_LENGTH = 5
-
 /**
  * Splits a device name into lower case parts. Per-device suffixes (serial numbers, MAC fragments such as "4d13",
  * "c4d1", "30485") are dropped, as are parts shorter than 3 characters.
@@ -43,15 +41,18 @@ function buildEntries(list = data) {
 const ENTRIES = buildEntries()
 
 /**
- * A part matches if it is equal to an entry. Longer entries (5+ characters) also match the start of a part, so
- * "assioma" finds "AssiomaPRO12774R" and "bkool" finds "BkoolSmartPro2", while a short entry such as "hrm" or "di"
- * only matches whole parts.
+ * An entry matches a part if it is equal to it. An entry that ends with `*` stands for a whole family and matches
+ * every part that starts with it: "hrm*" matches "hrm", "hrm200" and "hrmpro", "assioma*" matches "assiomapro". The
+ * prefix in front of the `*` needs at least 3 characters (see the tests of the shipped list).
  */
+function matchesPart(entry, part) {
+    return entry.endsWith('*') ? part.startsWith(entry.slice(0, -1)) : part === entry
+}
+
 function isKnownDeviceName(name, entries = ENTRIES) {
     const parts = nameParts(name)
     if (parts.length === 0) return false
-    return parts.some(part => entries.some(entry =>
-        part === entry || (entry.length >= MIN_PREFIX_LENGTH && part.startsWith(entry))))
+    return parts.some(part => entries.some(entry => matchesPart(entry, part)))
 }
 
-module.exports = { isKnownDeviceName, nameParts, buildEntries, MIN_PREFIX_LENGTH }
+module.exports = { isKnownDeviceName, matchesPart, nameParts, buildEntries }

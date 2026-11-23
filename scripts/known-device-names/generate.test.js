@@ -37,10 +37,8 @@ describe('buildKnownParts', () => {
     })
 
     test('at most maxParts parts are picked', () => {
-        const names = Array.from({ length: 10 }, (_, i) => {
-            const c = String.fromCharCode(97 + i)
-            return [`Brand${c}${c}${c}`, 5 + i]
-        })
+        const words = ['alpha', 'bravo', 'charlie', 'delta', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo']
+        const names = words.map((w, i) => [w, 5 + i])
         expect(buildKnownParts(real(names), { maxParts: 4 })).toHaveLength(4)
     })
 
@@ -56,6 +54,40 @@ describe('buildKnownParts', () => {
     })
 })
 
+describe('buildKnownParts: families', () => {
+    test('several parts that share a part as their prefix become one family', () => {
+        const picked = buildKnownParts(real([['HRM 1', 5], ['HRM200 2', 5], ['HRMPro 3', 5], ['HRM600 4', 5]]))
+        expect(parts(picked)).toEqual(['hrm*'])
+        expect(picked[0].members).toEqual(['hrm', 'hrm200', 'hrm600', 'hrmpro'])
+    })
+
+    test('parts that share a prefix of 5+ characters become a family, although the prefix is no part', () => {
+        const picked = buildKnownParts(real([['BkoolSmartPro', 5], ['BkoolSmartPro2', 5], ['BkoolSmartGo', 5]]))
+        expect(parts(picked)).toEqual(['bkool*'])
+    })
+
+    test('a prefix of less than 5 characters that is no part makes no family', () => {
+        const picked = buildKnownParts(real([['Smarbike', 5], ['Smarfit', 5]]))
+        expect(parts(picked).every(p => !p.endsWith('*'))).toBe(true)
+    })
+
+    test('the same users covered by two families: the shorter prefix, the brand, wins', () => {
+        const picked = buildKnownParts(real([['BkoolSmartPro', 5], ['BkoolSmartPro2', 5], ['BkoolSmartGo', 5]]))
+        expect(parts(picked)).toEqual(['bkool*'])
+    })
+
+    test('a part that covers the same users as a family stays a plain part', () => {
+        const picked = buildKnownParts(real([['Stryd', 5], ['Stryd', 5]]))
+        expect(parts(picked)).toEqual(['stryd'])
+    })
+
+    test('names that a family of the current list covers are not covered again', () => {
+        const names = real([['HRM200 1', 5], ['HRMPro 2', 5], ['Quarq 3', 5]])
+        const picked = buildKnownParts(names, { isCovered: name => /^hrm/i.test(name) })
+        expect(parts(picked)).toEqual(['quarq'])
+    })
+})
+
 describe('buildSuggestions', () => {
     const isCovered = name => /kickr/i.test(name)
     const data = real([['KICKR CORE 1111', 10], ['KICKR SNAP 2222', 6], ['VANRYSEL-HT-c4d1', 5], ['VANRYSEL-HT-a40e', 5], ['Rarebike', 1]])
@@ -67,6 +99,14 @@ describe('buildSuggestions', () => {
         expect(result.total).toBe(27)
         expect(result.coveredNow).toBe(16)
         expect(result.coveredWithSuggestions).toBe(26)
+    })
+
+    test('a family of the list covers its members, and is stale only if no device starts with it', () => {
+        const names = real([['HRM200 1', 5], ['HRMPro 2', 5]])
+        const covered = name => /^hrm/i.test(name)
+        const result = buildSuggestions(names, { entries: ['hrm*', 'xyz*'], isCovered: covered })
+        expect(result.suggestions).toEqual([])
+        expect(result.stale).toEqual(['xyz*'])
     })
 
     test('lists the parts of the list that no device of the period contains, and changes nothing', () => {
@@ -93,6 +133,11 @@ describe('buildPartTable', () => {
         expect(status('core')).toBe('covered')
         expect(status('vanrysel')).toBe('suggest')
         expect(status('rarebike')).toBe('other')
+    })
+
+    test('a part that a family of the list matches is listed', () => {
+        const t = buildPartTable(real([['HRM200 1', 5], ['HRMPro 2', 5]]), { entries: ['hrm*'], isCovered: n => /^hrm/i.test(n) })
+        expect(t.map(r => r.status)).toEqual(['listed', 'listed'])
     })
 
     test('counts users and distinct names', () => {

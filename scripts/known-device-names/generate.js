@@ -1,8 +1,38 @@
-const { nameParts } = require('../../src/features/webble/known-device-names')
+const { nameParts, matchesPart } = require('../../src/features/webble/known-device-names')
 
 const DEFAULTS = {
     maxParts: 30,         // how many parts are suggested at most (the list is reviewed by hand, it stays short)
     minUsers: 3,          // a part must cover at least this many users that no earlier part covers
+}
+
+const MIN_FAMILY_PREFIX = 3        // shortest prefix of a family
+const MIN_FAMILY_WORD = 5          // a prefix that is no part itself ("bkool") must be at least this long
+
+/**
+ * The candidates for the list: every part, and every family `prefix*` that several different parts share. A family
+ * is only formed if its prefix is a part itself ("hrm" -> hrm, hrm200, hrmpro) or at least 4 characters long
+ * ("bkool" -> bkoolsmartpro, bkoolsmartgo), so that nothing like "sma*" comes up.
+ * @returns {Map<string, Set<string>>}  entry -> the distinct parts it matches
+ */
+function buildCandidates(allParts) {
+    const candidates = new Map()
+    for (const part of allParts) candidates.set(part, new Set([part]))
+
+    const families = new Map()
+    for (const part of allParts) {
+        for (let len = MIN_FAMILY_PREFIX; len < part.length; len++) {
+            const prefix = part.slice(0, len)
+            const members = families.get(prefix) ?? new Set()
+            members.add(part)
+            families.set(prefix, members)
+        }
+    }
+    for (const [prefix, members] of families) {
+        const isPart = allParts.has(prefix)
+        if (isPart) members.add(prefix)
+        if (members.size >= 2 && (isPart || prefix.length >= MIN_FAMILY_WORD)) candidates.set(`${prefix}*`, members)
+    }
+    return candidates
 }
 
 /**
@@ -10,10 +40,11 @@ const DEFAULTS = {
  *
  * @param {{name:string, users:number}[]} real  devices that connected fine (name, number of users)
  * @param {object} [options]  `isCovered(name)`: names that the current list covers already are not covered again
- * @returns {{part:string, users:number, names:number, coveredUsers:number}[]}  in the order they were picked.
- *          `coveredUsers` is the number of users covered by this part and all parts before it
+ * @returns {{part:string, users:number, names:number, coveredUsers:number, members:string[]}[]}  in the order they
+ *          were picked. `part` is an entry of the list: a part ("kickr") or a family ("hrm*"). `members` are the
+ *          distinct parts it matches. `coveredUsers` is the number of users covered by this entry and all before it
  *
- * Greedy cover: the part that covers the most still uncovered users goes first (e.g. "kickr"), so parts that only
+ * Greedy cover: the entry that covers the most still uncovered users goes first (e.g. "kickr"), so parts that only
  * occur next to an already picked one ("core" in "KICKR CORE") never get on the list.
  */
 function buildKnownParts(real, options = {}) {
@@ -21,15 +52,28 @@ function buildKnownParts(real, options = {}) {
 
     const realNames = real.map(r => ({ parts: new Set(nameParts(r.name)), users: r.users ?? 1 }))
 
-    const nameCount = new Map()
-    for (const r of realNames) for (const p of r.parts) nameCount.set(p, (nameCount.get(p) ?? 0) + 1)
+    const allParts = new Set()
+    for (const r of realNames) for (const p of r.parts) allParts.add(p)
+    const candidates = buildCandidates(allParts)
 
-    // more users first. On a tie the more specific (longer) part - the brand ("tacx") rather than a model word that
-    // occurs everywhere ("neo") - then alphabetical, so that the result is stable
+    // entry -> indices of the names it matches
+    const matching = new Map()
+    for (const [entry] of candidates) matching.set(entry, [])
+    realNames.forEach((r, i) => {
+        for (const entry of candidates.keys()) {
+            if ([...r.parts].some(p => matchesPart(entry, p))) matching.get(entry).push(i)
+        }
+    })
+
+    // more users first. On a tie: an exact part before a family; among exact parts the longer one (the brand, not a
+    // model word that occurs everywhere); among families the shorter prefix ("bkool*" rather than "bkoolsmart*": the
+    // same users, but the brand); then alphabetical, so that the result is stable
     const isBetter = (a, b) => {
         if (a.users !== b.users) return a.users > b.users
-        if (a.part.length !== b.part.length) return a.part.length > b.part.length
-        return a.part < b.part
+        const aFamily = a.entry.endsWith('*'), bFamily = b.entry.endsWith('*')
+        if (aFamily !== bFamily) return !aFamily
+        if (a.entry.length !== b.entry.length) return aFamily ? a.entry.length < b.entry.length : a.entry.length > b.entry.length
+        return a.entry < b.entry
     }
 
     const uncovered = new Set(realNames.keys())
@@ -40,20 +84,20 @@ function buildKnownParts(real, options = {}) {
     let coveredUsers = 0
 
     while (picked.length < maxParts) {
-        const gain = new Map()
-        for (const i of uncovered) {
-            for (const p of realNames[i].parts) gain.set(p, (gain.get(p) ?? 0) + realNames[i].users)
-        }
-
         let best
-        for (const [part, users] of gain) {
-            if (!best || isBetter({ part, users }, best)) best = { part, users }
+        for (const [entry, indices] of matching) {
+            let users = 0
+            for (const i of indices) if (uncovered.has(i)) users += realNames[i].users
+            if (users > 0 && (!best || isBetter({ entry, users }, best))) best = { entry, users }
         }
         if (!best || best.users < minUsers) break
 
         coveredUsers += best.users
-        picked.push({ part: best.part, users: best.users, names: nameCount.get(best.part), coveredUsers })
-        for (const i of [...uncovered]) if (realNames[i].parts.has(best.part)) uncovered.delete(i)
+        picked.push({
+            part: best.entry, users: best.users, names: matching.get(best.entry).length, coveredUsers,
+            members: [...candidates.get(best.entry)].sort(),
+        })
+        for (const i of matching.get(best.entry)) uncovered.delete(i)
     }
 
     return picked
@@ -76,11 +120,11 @@ function buildSuggestions(real, options) {
     const picked = buildKnownParts(real, { ...rest, isCovered })
     const suggestions = picked.map(p => ({
         ...p,
-        examples: real.filter(r => !isCovered(r.name) && nameParts(r.name).includes(p.part))
+        examples: real.filter(r => !isCovered(r.name) && nameParts(r.name).some(part => matchesPart(p.part, part)))
             .sort((a, b) => b.users - a.users).slice(0, 3).map(r => r.name),
     }))
 
-    const stale = entries.filter(entry => !real.some(r => nameParts(r.name).some(part => part === entry || (entry.length >= 5 && part.startsWith(entry)))))
+    const stale = entries.filter(entry => !real.some(r => nameParts(r.name).some(part => matchesPart(entry, part))))
 
     return {
         suggestions,
@@ -111,14 +155,15 @@ function buildPartTable(real, { entries, isCovered, suggested = [] }) {
         }
     }
 
-    const isListed = part => entries.some(e => part === e || (e.length >= 5 && part.startsWith(e)))
-    const suggestedSet = new Set(suggested)
+    const isListed = part => entries.some(e => matchesPart(e, part))
+    // a part is suggested if it is one of the suggested parts or belongs to a suggested family
+    const isSuggested = part => suggested.some(e => matchesPart(e, part))
 
     return [...stats.values()]
         .map(st => {
             let status = 'other'
             if (isListed(st.part)) status = 'listed'
-            else if (suggestedSet.has(st.part)) status = 'suggest'
+            else if (isSuggested(st.part)) status = 'suggest'
             else if (st.coveredUsers / st.users >= 0.8) status = 'covered'
             return { part: st.part, users: st.users, names: st.names, status }
         })

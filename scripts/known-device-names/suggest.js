@@ -80,7 +80,8 @@ async function main() {
 
     console.log(`\nSuggested to add (${result.suggestions.length}), most useful first, with example names:`)
     for (const s of result.suggestions) {
-        console.log(`  ${s.part.padEnd(15)} +${String(s.users).padEnd(4)} users   ${s.examples.join(' | ')}`)
+        const family = s.part.endsWith('*') ? `  (${s.members.slice(0, 6).join(' ')}${s.members.length > 6 ? ' ...' : ''})` : ''
+        console.log(`  ${s.part.padEnd(15)} +${String(s.users).padEnd(4)} users   ${s.examples.join(' | ')}${family}`)
     }
     console.log('  (generic words such as "bike" or "sensor" can show up here: skip them)')
 
@@ -88,6 +89,7 @@ async function main() {
         console.log(`\nIn the list, but in no device name of the last ${args.days} days (${result.stale.length}):`)
         console.log('  ' + result.stale.join(' '))
     }
+    console.log('  (an entry ending with * is a family: it matches every part that starts with it)')
     console.log('\nNothing was changed. Edit src/features/webble/known-device-names.json by hand.')
 }
 

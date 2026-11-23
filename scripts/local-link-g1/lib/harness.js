@@ -78,8 +78,14 @@ function createPrompter({ interactive }) {
             console.log(`\n  >>> MANUAL STEP: ${text}`)
             if (!interactive)
                 return false
-            const answer = await question('  >>> press Enter when done (or type "skip"): ')
-            return !/^skip$/i.test(answer)
+            for (;;) {
+                const answer = await question('  >>> do the step above, then press Enter (or type "skip"): ')
+                if (answer === '')
+                    return true
+                if (/^skip$/i.test(answer))
+                    return false
+                console.log('  >>> this is not a code prompt: just press Enter once the step is done')
+            }
         },
         async ask(text) {
             return interactive ? await question(`  >>> ${text}: `) : undefined

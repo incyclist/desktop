@@ -169,11 +169,16 @@ class WebBleFeature extends Feature {
 
     /**
      * Chromium substitutes "Unknown or Unsupported Device (<MAC>)" for devices
-     * that do not advertise a name. Fitness devices always advertise a name, so
-     * nameless devices are never approved.
+     * that do not advertise a name. The text is localized (e.g. "Unbekanntes oder
+     * nicht unterstütztes Gerät (<MAC>)"), but the "(<deviceId>)" suffix is not, so
+     * that is what identifies the placeholder. Fitness devices always advertise a
+     * name, so nameless devices are never approved.
      */
-    _isUsableName(name) {
-        return !!name && !name.startsWith('Unknown or Unsupported Device')
+    _isUsableName(name, deviceId) {
+        if (!name) return false
+        if (name.startsWith('Unknown or Unsupported Device')) return false
+        if (deviceId && name.endsWith(`(${deviceId})`)) return false
+        return true
     }
 
     _onSelectBluetoothDevice(event, deviceList, callback) {
@@ -209,7 +214,7 @@ class WebBleFeature extends Feature {
             // excluded outright — not even as a last resort.
             const candidates = deviceList.filter(d =>
                 !this.discoveredDeviceIds.has(d.deviceId) &&
-                this._isUsableName(d.deviceName) &&
+                this._isUsableName(d.deviceName, d.deviceId) &&
                 !this.deviceCache.isBad(d.deviceId))
 
             // tier 1: a device we already know we want (this session or a previous

@@ -452,6 +452,26 @@ describe('WebBleFeature — _onSelectBluetoothDevice', () => {
         expect(feature.deviceMacsByName.size).toBe(0)
     })
 
+    test.each([
+        ['de', 'Unbekanntes oder nicht unterstütztes Gerät'],
+        ['nl', 'Onbekend of niet-ondersteund apparaat'],
+        ['pl', 'Nieznane lub nieobsługiwane urządzenie'],
+    ])('scanning: never approves localized (%s) Chromium placeholders', (_lang, text) => {
+        feature.scanning = true
+        const cb = jest.fn()
+        const deviceId = '52:7F:3B:3C:DE:AB'
+        feature._onSelectBluetoothDevice(makeEvent(), [{ deviceId, deviceName: `${text} (${deviceId})` }], cb)
+        expect(cb).not.toHaveBeenCalled()
+        expect(feature.pendingCallback).toBe(cb)
+    })
+
+    test('scanning: still approves a device whose real name merely contains parentheses', () => {
+        feature.scanning = true
+        const cb = jest.fn()
+        feature._onSelectBluetoothDevice(makeEvent(), [{ deviceId: 'AA:BB', deviceName: 'Tacx Flux (2)' }], cb)
+        expect(cb).toHaveBeenCalledWith('AA:BB')
+    })
+
     test('logs select-bluetooth-device only when the device list changes', () => {
         feature.scanning = true
         feature.logger.logEvent = jest.fn()

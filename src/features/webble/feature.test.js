@@ -247,6 +247,115 @@ describe('WebBleFeature — _inCooldown / reportProbeFailed', () => {
 
 })
 
+// ── cooldown by device name (rotating addresses) ────────────────────────────────
+
+describe('WebBleFeature — cooldown by device name', () => {
+
+    let feature
+    const makeEvent = () => ({ preventDefault: jest.fn() })
+    const named = (name, ...ids) => ids.map(id => ({ deviceId: id, deviceName: name }))
+    const approve = (list) => {
+        feature.scanning = true
+        const cb = jest.fn()
+        feature._onSelectBluetoothDevice(makeEvent(), list, cb)
+        return cb
+    }
+
+    beforeEach(() => {
+        feature = new WebBleFeature()
+        feature.logger.logEvent = jest.fn()
+    })
+
+    test('a single failed device does not block its name: a second device with the same name is still probed', () => {
+        feature.reportProbeFailed('aa', 'Volt')
+
+        expect(approve(named('Volt', 'aa', 'bb'))).toHaveBeenCalledWith('bb')
+        expect(feature._isNameBlocked('Volt', 'bb')).toBe(false)
+    })
+
+    test('the same address failing twice is not "two different addresses"', () => {
+        feature.reportProbeFailed('aa', 'Volt')
+        feature.reportProbeFailed('aa', 'Volt')
+
+        expect(feature._isNameBlocked('Volt', 'bb')).toBe(false)
+    })
+
+    test('failures on two different addresses block further addresses with that name, even as a last resort', () => {
+        feature.reportProbeFailed('aa', 'JBL PartyBox')
+        feature.reportProbeFailed('bb', 'JBL PartyBox')
+
+        const cb = approve(named('JBL PartyBox', 'cc'))
+
+        expect(cb).not.toHaveBeenCalled()
+        expect(feature.pendingCallback).toBe(cb)    // parked, nothing approved
+        expect(feature.logger.logEvent).toHaveBeenCalledWith(expect.objectContaining({ message: 'name cooldown', deviceName: 'JBL PartyBox', macs: 2 }))
+    })
+
+    test('other names are not affected', () => {
+        feature.reportProbeFailed('aa', 'JBL PartyBox')
+        feature.reportProbeFailed('bb', 'JBL PartyBox')
+
+        expect(approve(named('Volt', 'cc'))).toHaveBeenCalledWith('cc')
+    })
+
+    test('a name with a working device is never blocked (two real Volts, one unresponsive)', () => {
+        feature.deviceMacsByName.set('Volt', new Set(['good']))
+        feature.deviceCache.isGood.mockImplementation(mac => mac === 'good')
+        feature.reportProbeFailed('aa', 'Volt')
+        feature.reportProbeFailed('bb', 'Volt')
+
+        expect(feature._isNameBlocked('Volt', 'cc')).toBe(false)
+        expect(approve(named('Volt', 'cc'))).toHaveBeenCalledWith('cc')
+    })
+
+    test('a successful connect clears the failure history of that name', () => {
+        feature.reportProbeFailed('aa', 'Volt')
+        feature.reportConnectSucceeded('bb', 'Volt')
+        feature.reportProbeFailed('cc', 'Volt')
+
+        expect(feature._isNameBlocked('Volt', 'dd')).toBe(false)
+    })
+
+    test('a device we explicitly connect to or know as good is never blocked by name', () => {
+        feature.reportProbeFailed('aa', 'Volt')
+        feature.reportProbeFailed('bb', 'Volt')
+        feature.connectTargetMacs.add('target')
+        feature.deviceCache.isGood.mockImplementation(mac => mac === 'known')
+
+        expect(feature._isNameBlocked('Volt', 'target')).toBe(false)
+        expect(feature._isNameBlocked('Volt', 'known')).toBe(false)
+    })
+
+    test('the block expires once the failures are older than the window', () => {
+        feature.reportProbeFailed('aa', 'JBL PartyBox')
+        feature.reportProbeFailed('bb', 'JBL PartyBox')
+        expect(feature._isNameBlocked('JBL PartyBox', 'cc')).toBe(true)
+
+        for (const failures of feature.nameFailures.values()) {
+            for (const mac of failures.keys()) failures.set(mac, Date.now() - 6 * 60 * 1000)
+        }
+
+        expect(feature._isNameBlocked('JBL PartyBox', 'cc')).toBe(false)
+        expect(feature.nameFailures.size).toBe(0)
+    })
+
+    test('devices without a name are never name-blocked', () => {
+        feature.reportProbeFailed('aa')
+        feature.reportProbeFailed('bb')
+
+        expect(feature._isNameBlocked(undefined, 'cc')).toBe(false)
+    })
+
+    test('the name cooldown is logged once, when it starts', () => {
+        feature.reportProbeFailed('aa', 'JBL PartyBox')
+        feature.reportProbeFailed('bb', 'JBL PartyBox')
+        feature.reportProbeFailed('cc', 'JBL PartyBox')
+
+        const events = feature.logger.logEvent.mock.calls.filter(c => c[0].message === 'name cooldown')
+        expect(events).toHaveLength(1)
+    })
+})
+
 // ── reportConnectSucceeded ───────────────────────────────────────────────────────
 
 describe('WebBleFeature — reportConnectSucceeded', () => {

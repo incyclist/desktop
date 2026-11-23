@@ -13,6 +13,14 @@ const CONNECT_TARGET_TIMEOUT = 30 * 1000
 // asked to connect to (connectTargetMacs) are exempt — see _inCooldown().
 const PROBE_FAILURE_COOLDOWN = 60 * 1000
 
+// Some devices (e.g. speakers, earbuds) advertise under a rotating random address, so every few seconds
+// they show up as a "new" device with the same name and the per-address cooldown never applies. A name is
+// therefore also skipped once probes under it failed on at least NAME_BLOCK_MIN_MACS different addresses
+// within NAME_FAILURE_WINDOW. Never for a name that has a working device (several real devices can share a
+// name, e.g. two "Volt": one unresponsive trainer must not hide the other), and it expires on its own.
+const NAME_BLOCK_MIN_MACS = 2
+const NAME_FAILURE_WINDOW = 5 * 60 * 1000
+
 // linux has no native BLE binding, so WebBLE is its only option. win32 has WinrtBindings
 // as the default and stable path — WebBLE is announced there too so web-ui can opt
 // specific users into it behind a feature toggle, without desktop needing to know
@@ -56,6 +64,8 @@ class WebBleFeature extends Feature {
         // expense of other devices. Also not reset by startScan() — that reset is
         // exactly what let a persistently-failing device win every fresh scan cycle.
         this.probeCooldowns = new Map()
+        // deviceName → Map<MAC, timestamp of its last failed probe>, see NAME_BLOCK_MIN_MACS
+        this.nameFailures = new Map()
 
         this._scanLoopTimeout = null
         this._iterationInFlight = false
@@ -101,6 +111,50 @@ class WebBleFeature extends Feature {
         return true
     }
 
+    /** Addresses under which probes of this name failed recently (older failures expire). */
+    _recentNameFailures(name) {
+        const failures = this.nameFailures.get(name)
+        if (!failures) return []
+        const limit = Date.now() - NAME_FAILURE_WINDOW
+        for (const [mac, ts] of failures) {
+            if (ts < limit) failures.delete(mac)
+        }
+        if (failures.size === 0) this.nameFailures.delete(name)
+        return Array.from(failures.keys())
+    }
+
+    _isWorkingDevice(deviceId) {
+        return this.connectTargetMacs.has(deviceId) || this.deviceCache.isGood(deviceId)
+    }
+
+    /** True if any address seen under this name is a device we use or have connected to successfully. */
+    _nameHasWorkingDevice(name) {
+        const macs = this.deviceMacsByName.get(name)
+        return !!macs && Array.from(macs).some(mac => this._isWorkingDevice(mac))
+    }
+
+    /**
+     * A device is skipped by name if its name keeps failing under different addresses (rotating address).
+     * Devices we use (explicit connect target / known good) and names with a working device are never blocked.
+     */
+    _isNameBlocked(name, deviceId) {
+        if (!name || this._isWorkingDevice(deviceId) || this._nameHasWorkingDevice(name)) return false
+        return this._recentNameFailures(name).length >= NAME_BLOCK_MIN_MACS
+    }
+
+    _recordNameFailure(deviceId, name) {
+        if (!name) return
+        const wasBlocked = this._recentNameFailures(name).length >= NAME_BLOCK_MIN_MACS
+        const failures = this.nameFailures.get(name) ?? new Map()
+        failures.set(deviceId, Date.now())
+        this.nameFailures.set(name, failures)
+
+        const macs = this._recentNameFailures(name).length
+        if (!wasBlocked && macs >= NAME_BLOCK_MIN_MACS && !this._nameHasWorkingDevice(name)) {
+            this.logger.logEvent({ message: 'name cooldown', deviceName: name, macs, cooldownMs: NAME_FAILURE_WINDOW })
+        }
+    }
+
     /**
      * Relays a log event from the renderer (ipc-binding.js). The renderer can't use
      * gd-eventlog directly for this: it's loaded via the preload's own require() graph,
@@ -127,6 +181,7 @@ class WebBleFeature extends Feature {
         this.probeCooldowns.set(deviceId, Date.now() + PROBE_FAILURE_COOLDOWN)
         this.logger.logEvent({ message: 'probe failed, entering cooldown', deviceId, cooldownMs: PROBE_FAILURE_COOLDOWN })
         this.deviceCache.recordFailure(deviceId, deviceName)
+        this._recordNameFailure(deviceId, deviceName)
     }
 
     /**
@@ -151,6 +206,7 @@ class WebBleFeature extends Feature {
     reportConnectSucceeded(deviceId, deviceName) {
         this.connectTargetMacs.add(deviceId)
         this.deviceCache.markGood(deviceId, deviceName)
+        if (deviceName) this.nameFailures.delete(deviceName)
         this.logger.logEvent({ message: 'connect succeeded', deviceId, deviceName })
     }
 
@@ -215,6 +271,7 @@ class WebBleFeature extends Feature {
             const candidates = deviceList.filter(d =>
                 !this.discoveredDeviceIds.has(d.deviceId) &&
                 this._isUsableName(d.deviceName, d.deviceId) &&
+                !this._isNameBlocked(d.deviceName, d.deviceId) &&
                 !this.deviceCache.isBad(d.deviceId))
 
             // tier 1: a device we already know we want (this session or a previous

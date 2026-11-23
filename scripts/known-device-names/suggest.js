@@ -85,6 +85,10 @@ function describeFamily(suggestion) {
     return `  (${suggestion.members.slice(0, 6).join(' ')}${more})`
 }
 
+// The only place that writes to the console: the report is the purpose of this tool. It contains device model names and
+// counts read from the event log, no secrets (the Elasticsearch address and the path of the list are never printed).
+const print = (line = '') => console.log(line) // NOSONAR
+
 const pct = (part, total) => `${Math.round(100 * part / Math.max(1, total))}%`
 
 async function main() {
@@ -99,32 +103,32 @@ async function main() {
         maxParts: args.maxParts, minUsers: args.minUsers,
     })
 
-    console.log('devices that connected fine in the look-back period:')
-    console.log(`the list (version ${list.version}, ${entries.length} entries) covers ${pct(result.coveredNow, result.total)} of the users; with all suggestions ${pct(result.coveredWithSuggestions, result.total)}`)
+    print('devices that connected fine in the look-back period:')
+    print(`the list (version ${list.version}, ${entries.length} entries) covers ${pct(result.coveredNow, result.total)} of the users; with all suggestions ${pct(result.coveredWithSuggestions, result.total)}`)
 
     const table = buildPartTable(real, {
         entries, isCovered,
         suggested: result.suggestions.map(x => x.part),
     })
-    console.log(`\nThe ${args.top} parts that occur for most users (status: listed = in the list, suggest = worth adding,`)
-    console.log('covered = the devices with it are covered by other parts anyway):')
-    console.log('  part            users  names  status')
+    print(`\nThe ${args.top} parts that occur for most users (status: listed = in the list, suggest = worth adding,`)
+    print('covered = the devices with it are covered by other parts anyway):')
+    print('  part            users  names  status')
     for (const row of table.slice(0, args.top)) {
-        console.log(`  ${row.part.padEnd(15)} ${String(row.users).padStart(5)} ${String(row.names).padStart(6)}  ${row.status}`)
+        print(`  ${row.part.padEnd(15)} ${String(row.users).padStart(5)} ${String(row.names).padStart(6)}  ${row.status}`)
     }
 
-    console.log(`\nSuggested to add (${result.suggestions.length}), most useful first, with example names:`)
+    print(`\nSuggested to add (${result.suggestions.length}), most useful first, with example names:`)
     for (const s of result.suggestions) {
-        console.log(`  ${s.part.padEnd(15)} +${String(s.users).padEnd(4)} users   ${s.examples.join(' | ')}${describeFamily(s)}`)
+        print(`  ${s.part.padEnd(15)} +${String(s.users).padEnd(4)} users   ${s.examples.join(' | ')}${describeFamily(s)}`)
     }
-    console.log('  (generic words such as "bike" or "sensor" can show up here: skip them)')
+    print('  (generic words such as "bike" or "sensor" can show up here: skip them)')
 
     if (result.stale.length) {
-        console.log(`\nIn the list, but in no device name of the last ${args.days} days (${result.stale.length}):`)
-        console.log('  ' + result.stale.join(' '))
+        print(`\nIn the list, but in no device name of the last ${args.days} days (${result.stale.length}):`)
+        print('  ' + result.stale.join(' '))
     }
-    console.log('  (an entry ending with * is a family: it matches every part that starts with it)')
-    console.log('\nNothing was changed. Edit the list in incyclist-services by hand and increase its version.')
+    print('  (an entry ending with * is a family: it matches every part that starts with it)')
+    print('\nNothing was changed. Edit the list in incyclist-services by hand and increase its version.')
 }
 
 if (require.main === module)

@@ -195,6 +195,8 @@ class WebBleFeature extends Feature {
         if (this.connectTargetMacs.has(deviceId)) return
         this.deviceCache.markBad(deviceId, deviceName)
         this.logger.logEvent({ message: 'device confirmed unsupported', deviceId, deviceName })
+        // counts as a failure of this name, same as a failed probe (rotating-address devices often connect once)
+        this._recordNameFailure(deviceId, deviceName)
     }
 
     /**

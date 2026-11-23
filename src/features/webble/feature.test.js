@@ -346,6 +346,24 @@ describe('WebBleFeature — cooldown by device name', () => {
         expect(feature._isNameBlocked(undefined, 'cc')).toBe(false)
     })
 
+    test('a device confirmed unsupported counts as a failure of its name (speaker that connects once, then rotates)', () => {
+        feature.reportUnsupportedDevice('aa', 'JBL PartyBox')
+        expect(feature._isNameBlocked('JBL PartyBox', 'bb')).toBe(false)    // one address is not enough
+
+        feature.reportProbeFailed('bb', 'JBL PartyBox')
+
+        expect(feature._isNameBlocked('JBL PartyBox', 'cc')).toBe(true)
+        expect(approve(named('JBL PartyBox', 'cc'))).not.toHaveBeenCalled()
+    })
+
+    test('an unsupported report for an explicit connect target does not count', () => {
+        feature.connectTargetMacs.add('aa')
+        feature.reportUnsupportedDevice('aa', 'Volt')
+        feature.reportProbeFailed('bb', 'Volt')
+
+        expect(feature._isNameBlocked('Volt', 'cc')).toBe(false)
+    })
+
     test('the name cooldown is logged once, when it starts', () => {
         feature.reportProbeFailed('aa', 'JBL PartyBox')
         feature.reportProbeFailed('bb', 'JBL PartyBox')

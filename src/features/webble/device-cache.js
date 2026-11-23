@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { getAppDirectory } = require('../../utils')
 const { EventLogger } = require('gd-eventlog')
-const { isKnownDeviceName, KNOWN_NAMES_VERSION } = require('./known-device-names')
+const { isKnownDeviceName, getKnownNamesVersion } = require('./known-device-names')
 
 const FILE_NAME = 'webble-devices.json'
 
@@ -15,10 +15,11 @@ const BAD_THRESHOLD = 3
 // reach, not yet ready) is never put on the failed list when its name contains a part of known-device-names.json.
 // A device that connects and reports that it is not a fitness device ("unsupported") is blacklisted, whatever its name.
 //
-// The file stores the version of known-device-names.json it was last cleaned against. If the list has a different
-// version (it was changed, or the file is from an older release), all entries whose name the list matches are removed
-// once, "unsupported" and "did not respond" alike: those devices are probed again, and in the worst case they are
-// blacklisted again by their next probes.
+// The file stores the version of the list of known device names it was last cleaned against. The list is pushed in
+// by the renderer at startup (see applyKnownNames). If its version is higher than the stored one (the list was
+// changed, or the file is from an older release and has no version), all entries whose name the list matches are
+// removed once, "unsupported" and "did not respond" alike: those devices are probed again, and in the worst case
+// they are blacklisted again by their next probes.
 
 // Devices that advertise under rotating random addresses create a new entry for every address, none of which
 // ever reaches BAD_THRESHOLD. The name is the stable key: once this many different addresses with the same
@@ -61,7 +62,7 @@ class WebBleDeviceCache {
     }
 
     _load() {
-        let existed = false
+        this.fileExisted = false
         try {
             const file = this._filePath()
             if (fs.existsSync(file)) {
@@ -74,32 +75,28 @@ class WebBleDeviceCache {
                     // a file of an older release: the entries only, no version
                     this.entries = stored
                 }
-                existed = true
+                this.fileExisted = true
             }
         } catch (err) {
             this.logger.logEvent({ message: 'could not load webble device cache', error: err.message })
             this.entries = {}
         }
 
-        let changed = this._prune()
-        if (!existed) {
-            // nothing to clean in a new file
-            this.knownNamesVersion = KNOWN_NAMES_VERSION
-        }
-        else if (this.knownNamesVersion !== KNOWN_NAMES_VERSION) {
-            this._applyKnownNames()
-            changed = true
-        }
-        if (changed)
+        if (this._prune())
             this._save()
     }
 
     /**
-     * The list of known device names has another version than the one this file was cleaned against: removes every
-     * entry (unsupported, did not respond, failure counts) whose name the list matches. Devices we use ("good") stay.
+     * Called when the list of known device names was set (it has to be set before this is called): if its version is
+     * higher than the one this file was cleaned against, removes every entry (unsupported, did not respond, failure
+     * counts) whose name the list matches. Devices we use ("good") stay.
+     * @returns {boolean} whether the file was cleaned against a newer list
      */
-    _applyKnownNames() {
-        const from = this.knownNamesVersion
+    applyKnownNames() {
+        const to = getKnownNamesVersion()
+        const from = this.knownNamesVersion ?? 0
+        if (to <= from) return false
+
         let removed = 0
         for (const [mac, entry] of Object.entries(this.entries)) {
             if (entry.status !== 'good' && isKnownDeviceName(entry.name)) {
@@ -107,8 +104,13 @@ class WebBleDeviceCache {
                 removed++
             }
         }
-        this.knownNamesVersion = KNOWN_NAMES_VERSION
-        this.logger.logEvent({ message: 'webble device cache: known device names updated', from: from ?? 0, to: KNOWN_NAMES_VERSION, removed })
+        this.knownNamesVersion = to
+        this.logger.logEvent({ message: 'webble device cache: known device names updated', from, to, removed })
+
+        // a new installation has nothing to clean: the version is saved with its first entry
+        if (removed > 0 || this.fileExisted)
+            this._save()
+        return true
     }
 
     /**
@@ -143,7 +145,7 @@ class WebBleDeviceCache {
 
     _save() {
         try {
-            const content = { knownNamesVersion: this.knownNamesVersion ?? KNOWN_NAMES_VERSION, entries: this.entries }
+            const content = { knownNamesVersion: this.knownNamesVersion ?? 0, entries: this.entries }
             fs.writeFileSync(this._filePath(), JSON.stringify(content, null, 2), { encoding: 'utf8' })
         } catch (err) {
             this.logger.logEvent({ message: 'could not save webble device cache', error: err.message })

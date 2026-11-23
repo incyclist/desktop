@@ -3,7 +3,7 @@ const { ipcHandleNoResponse, ipcHandleSync, ipcCallSync, ipcCallNoResponse } = r
 const Feature = require('../base')
 const WebBleIpcBinding = require('./ipc-binding')
 const WebBleDeviceCache = require('./device-cache')
-const { isKnownDeviceName } = require('./known-device-names')
+const { isKnownDeviceName, setKnownDeviceNames, getKnownNamesVersion } = require('./known-device-names')
 const { EventLogger } = require('gd-eventlog')
 
 const CONNECT_TARGET_TIMEOUT = 30 * 1000
@@ -163,6 +163,22 @@ class WebBleFeature extends Feature {
         if (!wasBlocked && macs >= NAME_BLOCK_MIN_MACS && !this._nameHasWorkingDevice(name)) {
             this.logger.logEvent({ message: 'name cooldown', deviceName: name, macs, cooldownMs: NAME_FAILURE_WINDOW })
         }
+    }
+
+    /**
+     * Called (via IPC) by the renderer at startup with the list of known trainer and sensor names, which is owned by
+     * incyclist-services (delivered with the UI bundle). The list protects those devices from the failed list, and a
+     * new version cleans the entries that already exist, see WebBleDeviceCache.applyKnownNames().
+     * @param {{version:number, names:string[]}} list
+     */
+    setKnownDeviceNames(list) {
+        const previous = getKnownNamesVersion()
+        if (!setKnownDeviceNames(list)) {
+            this.logger.logEvent({ message: 'known device names rejected', version: list?.version, current: previous })
+            return
+        }
+        const cleaned = this.deviceCache.applyKnownNames()
+        this.logger.logEvent({ message: 'known device names set', version: list.version, count: list.names.length, previous, cleaned })
     }
 
     /**
@@ -466,6 +482,7 @@ class WebBleFeature extends Feature {
         ipcHandleNoResponse('webble-probe-failed', this.reportProbeFailed.bind(this), ipcMain)
         ipcHandleNoResponse('webble-connect-succeeded', this.reportConnectSucceeded.bind(this), ipcMain)
         ipcHandleNoResponse('webble-unsupported-device', this.reportUnsupportedDevice.bind(this), ipcMain)
+        ipcHandleNoResponse('webble-known-names', this.setKnownDeviceNames.bind(this), ipcMain)
         ipcHandleNoResponse('webble-log', this.log.bind(this), ipcMain)
     }
 
@@ -501,11 +518,14 @@ class WebBleFeature extends Feature {
         spec.webble.reportProbeFailed = ipcCallNoResponse('webble-probe-failed', ipcRenderer)
         spec.webble.reportConnectSucceeded = ipcCallNoResponse('webble-connect-succeeded', ipcRenderer)
         spec.webble.reportUnsupportedDevice = ipcCallNoResponse('webble-unsupported-device', ipcRenderer)
+        spec.webble.setKnownDeviceNames = ipcCallNoResponse('webble-known-names', ipcRenderer)
         spec.webble.log = ipcCallNoResponse('webble-log', ipcRenderer)
 
         // 'webble-services': binding supports setSupportedServices() (devices lib
         // announces its BLE service list — no desktop release needed for new services)
-        spec.registerFeatures(['webble', 'webble-services'])
+        // 'webble-known-names': binding supports setKnownDeviceNames() (the UI announces the list of known
+        // trainer and sensor names, owned by incyclist-services — no desktop release needed to change it)
+        spec.registerFeatures(['webble', 'webble-services', 'webble-known-names'])
     }
 }
 

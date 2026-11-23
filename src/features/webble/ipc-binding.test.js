@@ -64,6 +64,7 @@ const makeApi = (overrides = {}) => ({
     reportProbeFailed: jest.fn(),
     reportConnectSucceeded: jest.fn(),
     reportUnsupportedDevice: jest.fn(),
+    setKnownDeviceNames: jest.fn(),
     log: jest.fn(),
     ...overrides,
 })
@@ -141,6 +142,36 @@ describe('WebBleIpcBinding — state', () => {
         delete global.window
     })
 
+})
+
+// ── setKnownDeviceNames ───────────────────────────────────────────────────────
+
+describe('WebBleIpcBinding — setKnownDeviceNames', () => {
+
+    let binding
+    let api
+
+    beforeEach(() => {
+        binding = new WebBleIpcBinding()
+        api = makeApi()
+        binding.setApi(api)
+    })
+
+    test('hands the list on to the main process', () => {
+        const list = { version: 3, names: ['kickr', 'hrm*'] }
+        binding.setKnownDeviceNames(list)
+        expect(api.setKnownDeviceNames).toHaveBeenCalledWith(list)
+    })
+
+    test.each([undefined, null, {}, { version: 1 }, { version: 1, names: 'kickr' }])('ignores an invalid list: %j', (list) => {
+        binding.setKnownDeviceNames(list)
+        expect(api.setKnownDeviceNames).not.toHaveBeenCalled()
+    })
+
+    test('copes with a main process that does not offer it (older shell)', () => {
+        delete api.setKnownDeviceNames
+        expect(() => binding.setKnownDeviceNames({ version: 1, names: ['kickr'] })).not.toThrow()
+    })
 })
 
 // ── setSupportedServices ──────────────────────────────────────────────────────

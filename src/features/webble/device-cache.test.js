@@ -1,7 +1,8 @@
 // the whitelist is tested in known-device-names.test.js: here a name starting with "known" counts as known
+let mockListVersion = 2
 jest.mock('./known-device-names', () => ({
     isKnownDeviceName: jest.fn(name => /^known/i.test(name ?? '')),
-    KNOWN_NAMES_VERSION: 2,
+    getKnownNamesVersion: jest.fn(() => mockListVersion),
 }))
 
 jest.mock('fs')
@@ -18,6 +19,7 @@ const EXPECTED_FILE = path.join('/fake/app/dir', 'webble-devices.json')
 beforeEach(() => {
     jest.clearAllMocks()
     fs.existsSync.mockReturnValue(false)
+    mockListVersion = 2
 })
 
 describe('WebBleDeviceCache — loading', () => {
@@ -295,8 +297,17 @@ describe('WebBleDeviceCache — known trainer and sensor names', () => {
     })
 
     describe('the version of the list', () => {
-        test('a file without a version (older release) is cleaned: entries the list matches are removed, whatever the reason', () => {
+        test('loading a file cleans nothing: the list is not known yet', () => {
             const cache = load(entries())
+
+            expect(cache.isBad('unsupported')).toBe(true)
+            expect(fs.writeFileSync).not.toHaveBeenCalled()
+        })
+
+        test('a file without a version (older release) is cleaned when the list is set: entries it matches are removed, whatever the reason', () => {
+            const cache = load(entries())
+
+            expect(cache.applyKnownNames()).toBe(true)
 
             expect(cache.isBad('failed')).toBe(false)
             expect(cache.isBad('unsupported')).toBe(false)
@@ -306,59 +317,79 @@ describe('WebBleDeviceCache — known trainer and sensor names', () => {
             expect(cache.isGood('good')).toBe(true)
         })
 
-        test('the cleaned file is written with the current version', () => {
-            load(entries())
+        test('the cleaned file is written with the version of the list', () => {
+            const cache = load(entries())
+            cache.applyKnownNames()
 
             const content = written()
             expect(content.knownNamesVersion).toBe(2)
             expect(Object.keys(content.entries).sort()).toEqual(['good', 'noise'])
         })
 
-        test('a file of an older version of the list is cleaned, too', () => {
+        test('a file that was cleaned against an older version is cleaned again', () => {
             const cache = load(stored(entries(), 1))
 
+            expect(cache.applyKnownNames()).toBe(true)
             expect(cache.isBad('unsupported')).toBe(false)
             expect(cache.isBad('noise')).toBe(true)
             expect(written().knownNamesVersion).toBe(2)
         })
 
         test('the cleanup is logged', () => {
-            const cache = new WebBleDeviceCache()
+            const cache = load(stored(entries(), 1))
             cache.logger.logEvent = jest.fn()
-            cache.entries = entries()
-            cache.knownNamesVersion = 1
 
-            cache._applyKnownNames()
+            cache.applyKnownNames()
 
             expect(cache.logger.logEvent).toHaveBeenCalledWith({ message: 'webble device cache: known device names updated', from: 1, to: 2, removed: 4 })
         })
 
-        test('a file of the current version is left alone: a known device that is unsupported stays blacklisted', () => {
+        test('a file of the same version is left alone: a known device that is unsupported stays blacklisted', () => {
             const cache = load(stored(entries(), 2))
 
+            expect(cache.applyKnownNames()).toBe(false)
             expect(cache.isBad('unsupported')).toBe(true)
             expect(cache.isBad('failed')).toBe(true)
             expect(fs.writeFileSync).not.toHaveBeenCalled()
         })
 
+        test('a file of a higher version (a newer list was seen before) is left alone, too', () => {
+            const cache = load(stored(entries(), 5))
+
+            expect(cache.applyKnownNames()).toBe(false)
+            expect(cache.isBad('unsupported')).toBe(true)
+        })
+
+        test('no list set yet (version 0): nothing is cleaned', () => {
+            mockListVersion = 0
+            const cache = load(entries())
+
+            expect(cache.applyKnownNames()).toBe(false)
+            expect(cache.isBad('unsupported')).toBe(true)
+        })
+
         test('a device that is blacklisted again after the cleanup stays blacklisted until the version changes', () => {
             const cache = load(entries())
+            cache.applyKnownNames()
             cache.markBad('again', 'KnownTrainer 6')
             expect(cache.isBad('again')).toBe(true)
 
             const reloaded = load(written())
+            expect(reloaded.applyKnownNames()).toBe(false)
             expect(reloaded.isBad('again')).toBe(true)
         })
 
-        test('a new installation (no file) has nothing to clean and writes nothing at startup', () => {
+        test('a new installation (no file) has nothing to clean and writes nothing when the list is set', () => {
             const cache = new WebBleDeviceCache()
 
+            expect(cache.applyKnownNames()).toBe(true)
             expect(cache.knownNamesVersion).toBe(2)
             expect(fs.writeFileSync).not.toHaveBeenCalled()
         })
 
-        test('every file that is written carries the version', () => {
+        test('the first file that is written carries the version', () => {
             const cache = new WebBleDeviceCache()
+            cache.applyKnownNames()
             cache.markBad('aa', 'JBL PartyBox')
 
             expect(written()).toEqual(expect.objectContaining({ knownNamesVersion: 2, entries: expect.objectContaining({ aa: expect.any(Object) }) }))

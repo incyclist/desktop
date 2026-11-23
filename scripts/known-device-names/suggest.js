@@ -1,24 +1,46 @@
 #!/usr/bin/env node
 /**
- * Suggests parts for src/features/webble/known-device-names.json from the event log in Elasticsearch. The list is
- * maintained by hand: this script only PRINTS suggestions and never changes any file.
+ * Suggests parts for the list of known device names from the event log in Elasticsearch. The list lives in
+ * incyclist-services (src/devices/known-names/known-device-names.ts, expected next to this repository, or
+ * --list <file>) and is maintained by hand: this script only PRINTS suggestions and never changes any file.
  *
- *   ES_URL=http://192.168.2.180:9200 node scripts/known-device-names/suggest.js [--days 90] [--max-parts 30]
+ *   ES_URL=http://192.168.2.180:9200 node scripts/known-device-names/suggest.js [--list <file>] [--days 90] [--max-parts 30]
  *                                                                               [--min-users 3] [--top 60]
  *
  * It reads the BLE devices that connected fine (`start result: success`: the device connected and delivered data).
  * Devices that failed or were found to be unsupported are not looked at. Only model names are read, users are only
  * counted.
  */
+const fs = require('node:fs')
 const path = require('node:path')
 const { buildSuggestions, buildPartTable, DEFAULTS } = require('./generate')
 const { isKnownDeviceName, buildEntries } = require('../../src/features/webble/known-device-names')
 
+const DEFAULT_LIST = path.join(__dirname, '../../../services/src/devices/known-names/known-device-names.ts')
+
+/**
+ * Reads `{ version, names }` from the list of incyclist-services (a TypeScript file) or from a JSON file.
+ * @throws if no list can be found in the text
+ */
+function parseList(text) {
+    const trimmed = text.trim()
+    if (trimmed.startsWith('{')) {
+        const json = JSON.parse(trimmed)
+        return { version: json.version, names: json.names }
+    }
+    const version = /version:\s*(\d+)/.exec(text)?.[1]
+    const block = /names:\s*\[([\s\S]*?)\n\s*\]/.exec(text)?.[1]
+    if (!version || block === undefined)
+        throw new Error('no list of known device names found (expected "version: <n>" and "names: [...]")')
+    return { version: Number(version), names: [...block.matchAll(/'([a-z0-9*]+)'/g)].map(m => m[1]) }
+}
+
 function parseArgs(argv) {
-    const args = { top: 60, days: 90, maxParts: DEFAULTS.maxParts, minUsers: DEFAULTS.minUsers }
+    const args = { list: process.env.KNOWN_NAMES_FILE ?? DEFAULT_LIST, top: 60, days: 90, maxParts: DEFAULTS.maxParts, minUsers: DEFAULTS.minUsers }
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i]
-        if (a === '--days') args.days = Number(argv[++i])
+        if (a === '--list') args.list = argv[++i]
+        else if (a === '--days') args.days = Number(argv[++i])
         else if (a === '--max-parts') args.maxParts = Number(argv[++i])
         else if (a === '--top') args.top = Number(argv[++i])
         else if (a === '--min-users') args.minUsers = Number(argv[++i])
@@ -58,17 +80,19 @@ async function main() {
     const args = parseArgs(process.argv.slice(2))
     const esUrl = (process.env.ES_URL ?? 'http://localhost:9200').replace(/\/$/, '')
     const real = await namesWithUsers(esUrl, args.days, 'start result: success', 'device', [{ term: { 'interface.keyword': 'ble' } }])
-    const entries = buildEntries()
+    const list = parseList(fs.readFileSync(args.list, 'utf8'))
+    const entries = buildEntries(list.names)
+    const isCovered = name => isKnownDeviceName(name, entries)
     const result = buildSuggestions(real, {
-        entries, isCovered: name => isKnownDeviceName(name),
+        entries, isCovered,
         maxParts: args.maxParts, minUsers: args.minUsers,
     })
 
     console.log(`${real.length} different device names connected fine in the last ${args.days} days`)
-    console.log(`the list (${entries.length} parts) covers ${pct(result.coveredNow, result.total)} of the users; with all suggestions ${pct(result.coveredWithSuggestions, result.total)}`)
+    console.log(`the list (version ${list.version}, ${entries.length} entries, ${path.basename(args.list)}) covers ${pct(result.coveredNow, result.total)} of the users; with all suggestions ${pct(result.coveredWithSuggestions, result.total)}`)
 
     const table = buildPartTable(real, {
-        entries, isCovered: name => isKnownDeviceName(name),
+        entries, isCovered,
         suggested: result.suggestions.map(x => x.part),
     })
     console.log(`\nThe ${args.top} parts that occur for most users (status: listed = in the list, suggest = worth adding,`)
@@ -90,10 +114,10 @@ async function main() {
         console.log('  ' + result.stale.join(' '))
     }
     console.log('  (an entry ending with * is a family: it matches every part that starts with it)')
-    console.log('\nNothing was changed. Edit src/features/webble/known-device-names.json by hand.')
+    console.log(`\nNothing was changed. Edit ${args.list} by hand and increase its version.`)
 }
 
 if (require.main === module)
     main().catch(err => { console.error(err.message); process.exit(1) })
 
-module.exports = { parseArgs }
+module.exports = { parseArgs, parseList }

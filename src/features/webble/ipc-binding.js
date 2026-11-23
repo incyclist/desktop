@@ -139,6 +139,17 @@ class WebBleIpcBinding extends EventEmitter {
         this._log({ message: 'supported services set', count: this._optionalServices.length, debug: true })
     }
 
+    /**
+     * Called by the UI (feature-detected, announced as 'webble-known-names') with the list of known trainer and
+     * sensor names, `{ version, names }`, owned by incyclist-services. Handed on to the main process, which decides
+     * which devices may be put on the failed list.
+     */
+    setKnownDeviceNames(list) {
+        if (!list || !Array.isArray(list.names)) return
+        this.getApi()?.setKnownDeviceNames?.(list)
+        this._log({ message: 'known device names announced', version: list.version, count: list.names.length, debug: true })
+    }
+
     on(event, callback) {
         super.on(event, callback)
         if (event === 'stateChange' && !this._stateEmitted) {

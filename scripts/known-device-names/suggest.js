@@ -29,9 +29,10 @@ function parseList(text) {
         return { version: json.version, names: json.names }
     }
     const version = /version:\s*(\d+)/.exec(text)?.[1]
-    const open = text.indexOf('[', Math.max(0, text.indexOf('names:')))
+    const namesAt = text.indexOf('names:')
+    const open = text.indexOf('[', Math.max(0, namesAt))
     const close = open < 0 ? -1 : text.indexOf(']', open)
-    if (!version || text.indexOf('names:') < 0 || close < 0)
+    if (!version || !text.includes('names:') || close < 0)
         throw new Error('no list of known device names found (expected "version: <n>" and "names: [...]")')
     const block = text.slice(open + 1, close)
     return { version: Number(version), names: [...block.matchAll(/'([a-z0-9*]+)'/g)].map(m => m[1]) }
@@ -98,7 +99,7 @@ async function main() {
         maxParts: args.maxParts, minUsers: args.minUsers,
     })
 
-    console.log(`${real.length} different device names connected fine in the last ${args.days} days`)
+    console.log('devices that connected fine in the look-back period:')
     console.log(`the list (version ${list.version}, ${entries.length} entries) covers ${pct(result.coveredNow, result.total)} of the users; with all suggestions ${pct(result.coveredWithSuggestions, result.total)}`)
 
     const table = buildPartTable(real, {

@@ -67,6 +67,11 @@ describe('the list that is shipped', () => {
         expect(new Set(data).size).toBe(data.length)
     })
 
+    test('has no redundant entries: an entry of 5+ characters already matches every part that starts with it', () => {
+        const redundant = data.filter(entry => data.some(other => other !== entry && other.length >= 5 && entry.startsWith(other)))
+        expect(redundant).toEqual([])
+    })
+
     test('is sorted, so that a change shows up clearly in a review', () => {
         expect([...data]).toEqual([...data].sort())
     })
@@ -79,6 +84,7 @@ describe('the list that is shipped', () => {
 
     test.each([
         'Tacx Flux-2 30485', 'KICKR CORE 4D13', 'Wahoo KICKR 7A07', 'Zwift Hub', 'Volt', 'HRM-Dual:644478', 'Polar H10 12345678',
+        'ASSIOMA08675R', 'AssiomaPRO12774R',
     ])('recognises the trainer or sensor %s', (name) => {
         expect(isKnownDeviceName(name)).toBe(true)
     })

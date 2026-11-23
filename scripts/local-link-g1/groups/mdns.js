@@ -84,22 +84,22 @@ async function run(ctx) {
         instructions: 'change the network (switch Wi-Fi / replug the cable / renew DHCP) and wait; the app must re-announce within ~10 s',
         payload: { type: 'network-changed', addresses: [] },
     })
-    await reannounceCheck('4', 'resume / unlock: reannounce republishes', {
-        instructions: 'suspend and resume the computer (or lock and unlock the screen), then wait',
+    await reannounceCheck('4', 'resume from suspend: reannounce republishes', {
+        instructions: 'suspend and resume the computer (lock/unlock alone does not trigger it on Linux; Electron reports lock/unlock only on Windows and macOS), then wait',
         payload: { type: 'resumed' },
     })
 
     await ctx.check('5', 'switching the link off withdraws the announcement (goodbye); switching on announces again', async () => {
         const watcher = discovery.watch()
         await waitFor(() => watcher.events.some(e => e.kind === 'up'), { timeout: 6000, what: 'the watcher to learn the service' })
-        await ctx.step('switch the phone link OFF in the app settings, then continue', async () => { await host.service.setEnabled(false) })
+        await ctx.step('uncheck "Share routes with my phones and tablets" in Settings > Routes > Route Sharing, then continue', async () => { await host.service.setEnabled(false) })
         await sleep(1500)
         const goodbye = watcher.events.some(e => e.kind === 'down' && e.name === ctx.announced.name)
         watcher.stop()
         assert.ok(goodbye, 'goodbye (TTL 0) seen by a browser that already knew the service')
         const gone = await discovery.browse({ timeout: 3500 })
         assert.eq(gone.length, 0, `still announced: ${JSON.stringify(gone.map(s => s.name))}`)
-        await ctx.step('switch the phone link ON again, then continue', async () => { await host.service.setEnabled(true) })
+        await ctx.step('check "Share routes with my phones and tablets" again in Settings > Routes > Route Sharing, then continue', async () => { await host.service.setEnabled(true) })
         const back = await discovery.browse({ timeout: 8000, until: l => l.length > 0 })
         assert.eq(back.length, 1, 're-announced')
         control = await ctx.target()

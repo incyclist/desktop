@@ -175,23 +175,7 @@ describe('LocalLinkFeature', () => {
             expect((await feature.getStatus()).running.control).toBe(true)
         })
 
-        test('a main-frame navigation of the main window triggers the close', async () => {
-            const contents = new EventEmitter()
-            const win = new EventEmitter()
-            win.webContents = contents
-            electron.app.incyclistApp = { getMainWindow: () => ({ win }) }
-
-            const socket = await connectedClient()
-            contents.emit('did-start-navigation', { isMainFrame: false, isSameDocument: false })
-            contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true })
-            expect(closedEvents()).toHaveLength(0)
-
-            contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
-            await new Promise(r => socket.once('close', r))
-            expect(closedEvents()[0].reason).toBe('renderer-gone')
-        })
-
-        test('render process crash and window close trigger the close', async () => {
+        test('render process crash, destroyed contents and window close trigger the close', async () => {
             const contents = new EventEmitter()
             const win = new EventEmitter()
             win.webContents = contents
@@ -200,8 +184,9 @@ describe('LocalLinkFeature', () => {
 
             await connectedClient()
             contents.emit('render-process-gone')
+            contents.emit('destroyed')
             win.emit('closed')
-            expect(spy).toHaveBeenCalledTimes(2)
+            expect(spy).toHaveBeenCalledTimes(3)
         })
 
         test('the webContents is watched only once', async () => {
@@ -209,7 +194,7 @@ describe('LocalLinkFeature', () => {
             electron.app.incyclistApp = { getMainWindow: () => ({ win: { webContents: contents } }) }
             feature.watchRenderer()
             feature.watchRenderer()
-            expect(contents.listenerCount('did-start-navigation')).toBe(1)
+            expect(contents.listenerCount('render-process-gone')).toBe(1)
         })
 
         test('a missing main window is tolerated', () => {

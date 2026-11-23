@@ -58,7 +58,8 @@ class Context {
     cleanup() {
         const open = this.phones.splice(0)
         open.forEach(p => p.close())
-        return open.length > 0
+        const sockets = http.closeAll()           // HTTP requests and streams a check left open
+        return open.length > 0 || sockets > 0
     }
 
     /**
@@ -95,7 +96,7 @@ class Context {
             return { host: this.opts.host, port: this.opts.controlPort }
         const found = await discovery.browse({ timeout: 4000, until: list => list.length > 0 })
         if (found.length === 0)
-            throw new ManualRequired('no _incyclist._tcp service found; pass --host and --control-port, or open "Connect your phone" in the app')
+            throw new ManualRequired('no _incyclist._tcp service found; pass --host and --control-port, or open Settings > Routes > Route Sharing > Connect your phone or tablet in the app')
         const wanted = this.opts.name ? found.find(s => s.name.includes(this.opts.name)) : found[0]
         if (!wanted)
             throw new ManualRequired(`no announced service matches --name ${this.opts.name}`)
@@ -143,7 +144,7 @@ class Context {
         p?.close()
         if (hello?.b?.pairingOpen)
             return
-        await this.step('open "Connect your phone" (the pairing window) on the computer under test')
+        await this.step('open Settings > Routes > Route Sharing > Connect your phone or tablet (the pairing window) on the computer under test')
     }
 
     async readPin() {
@@ -184,7 +185,7 @@ class Context {
     }
 
     /** Pairs this harness as a new phone. Returns credentials {linkId, secret, name}. */
-    async pairNew(clientName = 'G1 harness') {
+    async pairNew(clientName = 'G1 harness', { keep = true } = {}) {
         await this.ensurePairingOpen()
         await this.throttle(this.pairTimes, 4, () => this.host.resetRateLimits())
         const p = await this.helloPhone()
@@ -195,7 +196,8 @@ class Context {
         assert.eq(res.t, 'paired', `pair-verify answered ${JSON.stringify(res.b)}`)
         p.close()
         const creds = { linkId: res.b.linkId, secret: res.b.secret, name: res.b.name }
-        this.setCreds(creds)
+        if (keep)
+            this.setCreds(creds)
         return creds
     }
 

@@ -334,7 +334,7 @@ class LocalLinkFeature extends Feature {
 
     /**
      * Control sessions are keyed in the renderer, so they must not outlive it. Listeners, media
-     * state and the announcement stay. The webContents survives reloads, so it is watched once.
+     * state and the announcement stay. The webContents is watched only once.
      */
     watchRenderer() {
         let contents
@@ -348,12 +348,6 @@ class LocalLinkFeature extends Feature {
             return
         this.watchedContents.add(contents)
 
-        contents.on('did-start-navigation', (details, _url, isInPlace, isMainFrame) => {
-            const main = details?.isMainFrame ?? isMainFrame
-            const inPlace = details?.isSameDocument ?? isInPlace
-            if (main && !inPlace)
-                this.onRendererGone()
-        })
         contents.on('render-process-gone', () => this.onRendererGone())
         contents.on('destroyed', () => this.onRendererGone())
         win?.once?.('closed', () => this.onRendererGone())

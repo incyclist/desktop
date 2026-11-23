@@ -133,7 +133,7 @@ async function run(ctx) {
     })
 
     await ctx.check('10', 'pairing-closed: with the pairing window closed pair-request and pair-verify are refused', async () => {
-        await ctx.step('close the pairing window ("Connect your phone") but leave the paired phone in place',
+        await ctx.step('close the pairing window (Settings > Routes > Route Sharing > Connect your phone or tablet) but leave the paired phone in place',
             async () => { await ctx.host.service.closePairing() })
         const phone = await ctx.helloPhone()
         assert.eq(phone.helloBody.pairingOpen, false, 'hello.pairingOpen')

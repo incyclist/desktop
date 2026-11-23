@@ -205,20 +205,6 @@ async function run(ctx) {
         assert.eq(accepted, 4, 'connections accepted')
     })
 
-    await ctx.check('14', 'renderer reload closes control connections (reason renderer-gone); reconnect and re-auth work', async () => {
-        const { phone } = await ctx.login()
-        await ctx.step('reload the app window (Ctrl+R) in the running dev app', async () => {
-            host.rendererReload()
-        })
-        assert.ok(await phone.closedWithin(host ? 3000 : 60_000), 'control connection closed')
-        if (host) {
-            assert.ok(host.events.some(e => e.type === 'connection-closed' && e.reason === 'renderer-gone'), 'transport reports reason renderer-gone')
-        }
-        await sleep(host ? 200 : 3000)
-        const again = await ctx.login()
-        assert.ok(again.session.mediaToken, 'new session after reload')
-    }, { timeout: 90_000 })
-
     await ctx.check('15', 'network change event triggers a re-announcement; the phone recovers (browse + challenge-response)', async () => {
         if (!host)
             return skip('simulation needs the in-process host; the real thing is 15b')

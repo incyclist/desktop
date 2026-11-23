@@ -24,7 +24,7 @@ Target (default: full app, found by mDNS browse for _incyclist._tcp)
   --name <text>            pick the announced computer whose name contains <text>
 
 Pairing in full-app mode
-  --pin <6 digits>         code shown in "Connect your phone" (or env G1_PIN, or typed when prompted)
+  --pin <6 digits>         code shown in Settings > Routes > Route Sharing > Connect your phone or tablet (or env G1_PIN, or typed when prompted)
   --pin-file <file>        file that always holds the current code (the code changes with every pair-request)
   --creds <file>           keep credentials of the paired test phone between runs (0600)
 
@@ -36,7 +36,7 @@ Run control
   --groups <list>          comma separated subset of: i,ii,iii,iv,v,vi,vii (default: all)
   --slow                   include real-time waits (120 s pairing expiry, 60 s idle timeout, rate-limit windows)
   --no-wait                never wait for a human: manual steps are reported as MANUAL
-  --keep                   keep the self-host work directory (fixtures, 48 MB)
+  --keep                   keep the self-host work directory (fixtures; the 4 GB video is sparse)
   --help
 
 Groups: i route serving | ii bidirectional TCP | iii pairing + auth | iv peer filter |

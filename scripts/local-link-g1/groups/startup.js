@@ -149,7 +149,7 @@ async function remote(ctx) {
         const { session } = await ctx.login(creds)
         const before = { control: (await ctx.target()).port, media: session.mediaPort }
         ctx.cleanup()
-        await ctx.step(`quit the app completely and start it again (npm run dev). Do NOT open "Connect your phone". Control port was ${before.control}, media port ${before.media}`)
+        await ctx.step(`quit the app completely and start it again (npm run dev). Do NOT open Settings > Routes > Route Sharing > Connect your phone or tablet. Control port was ${before.control}, media port ${before.media}`)
         assert.ok(await wait(async () => (await found()).length > 0, 90_000), 'announcement came back without UI action')
         const after = await ctx.target()
         assert.eq(after.port, before.control, 'control port')
@@ -171,7 +171,7 @@ async function remote(ctx) {
     }, { timeout: 200_000 })
 
     await ctx.check('3', 'zero paired phones / link off: nothing listens after a restart', async () => {
-        await ctx.step('remove all paired phones (or switch the link off), quit and restart the app, then continue')
+        await ctx.step('remove all paired phones (or uncheck "Share routes with my phones and tablets" in Settings > Routes > Route Sharing), quit and restart the app, then continue')
         assert.eq((await discovery.browse({ timeout: 4000 })).length, 0, 'announced')
     })
 }

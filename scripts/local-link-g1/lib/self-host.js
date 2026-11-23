@@ -160,11 +160,6 @@ class SelfHost {
         await this.binding.send(conn.id, payload)
     }
 
-    /** The renderer reloaded: what main does on did-start-navigation of the main frame. */
-    rendererReload() {
-        this.feature.onRendererGone()
-    }
-
     async waitEvent(pred, timeout = 3000, what = 'event') {
         const seen = this.events.length
         return await waitFor(() => this.events.slice(seen).find(pred), { timeout, what })

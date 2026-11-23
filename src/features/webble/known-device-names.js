@@ -1,4 +1,4 @@
-const data = require('./known-device-names.json')
+const { version, names } = require('./known-device-names.json')
 
 /**
  * Parts of the advertised names of the trainers and sensors our users ride with (e.g. "kickr", "tacx",
@@ -6,7 +6,9 @@ const data = require('./known-device-names.json')
  * respond (not by the persisted blacklist, not by the name cooldown). It is still blacklisted when it connects and
  * reports that it is not a fitness device.
  *
- * The list (known-device-names.json) is maintained by hand. scripts/known-device-names/suggest.js proposes
+ * The list (known-device-names.json) is maintained by hand: `names` is the list, `version` is increased with every
+ * change. The block list (device-cache.js) stores the version it was last cleaned against: if it differs, the
+ * entries of the block list that the list matches are removed once. scripts/known-device-names/suggest.js proposes
  * additions from the event log, it never changes the file. See scripts/known-device-names/README.md.
  */
 
@@ -34,7 +36,7 @@ function isDeviceId(part) {
     return /^[0-9]+$/.test(part) || (/^[0-9a-f]+$/.test(part) && /[0-9]/.test(part))
 }
 
-function buildEntries(list = data) {
+function buildEntries(list = names) {
     return [...new Set(list.map(e => e.toLowerCase()))]
 }
 
@@ -55,4 +57,4 @@ function isKnownDeviceName(name, entries = ENTRIES) {
     return parts.some(part => entries.some(entry => matchesPart(entry, part)))
 }
 
-module.exports = { isKnownDeviceName, matchesPart, nameParts, buildEntries }
+module.exports = { isKnownDeviceName, matchesPart, nameParts, buildEntries, KNOWN_NAMES_VERSION: version }

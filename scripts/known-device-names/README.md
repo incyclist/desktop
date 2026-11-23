@@ -7,10 +7,9 @@
 - a device whose name contains a listed part is **never put on the failed list because it did not respond** (busy,
   out of reach, not ready yet): no blacklist entry, no name cooldown, no name verdict (a name written off because of
   hundreds of speaker/TV addresses never applies to it);
-- an **older blacklisting** that was caused by failed connects is ignored for such a device, so a trainer that was
-  banned by mistake is probed again;
 - a device that **connects and reports that it is not a fitness device** ("unsupported") is blacklisted anyway, and
-  that blacklisting is kept.
+  that blacklisting is kept;
+- when the list changes, blocks that already exist are cleaned up **once**, see "Version" below.
 
 Matching (`known-device-names.js`): the advertised name is split into lower case parts; serial numbers and MAC
 fragments are dropped (`VANRYSEL-HT-c4d1` -> `vanrysel`, `AssiomaPRO12774R` -> `assiomapro`). A part matches an entry
@@ -20,9 +19,23 @@ if it is equal to it. An entry ending with `*` is a **family** and matches every
 
 ## The file
 
-A sorted JSON array of lower case parts (3 or more characters, a family needs 3 before the `*`). Change it by hand,
-in a pull request. A test fails if an entry is already matched by a family of the list. The script below only
+```json
+{ "version": 1, "names": ["bkool*", "hrm*", "kickr", "tacx", "..."] }
+```
+
+`names` is a sorted list of lower case parts (3 or more characters, a family needs 3 before the `*`). Change it by
+hand, in a pull request. A test fails if an entry is already matched by a family of the list. The script below only
 **suggests**, it never writes the file.
+
+### Version
+
+**Increase `version` whenever you change `names`.** `webble-devices.json` (the block list) stores the version of the
+list it was last cleaned against. At the first start with another version (also for a file without a version, i.e.
+from an older release) every entry of the block list that the list matches is removed once, whatever the reason
+(unsupported, did not respond, failure counts): those devices are probed again. In the worst case they are blocked
+again by their next probes (a known name that does not respond is no longer blocked at all; one that reports
+"unsupported" is). Devices we connected to ("good") are never removed. A new installation has nothing to clean. If you
+forget to increase the version, blocks that exist already stay until the next change.
 
 ## Getting suggestions
 
@@ -48,6 +61,6 @@ suggestions: skip them, the list is yours.
 
 ## A new trainer is banned although it is a trainer
 
-If it reported "unsupported", adding a part of its name to the list is not enough: delete its entry in
-`webble-devices.json`, or the whole file (the app directory, app closed). A device on the list that only did not
-respond needs nothing: it is released by the next release that contains it.
+Add a part of its name to the list and **increase the version**: the next release removes its block (and the blocks of
+all devices that the list matches) at its first start. For a single machine without a release, delete the entry in
+`webble-devices.json`, or the whole file (the app directory, app closed).

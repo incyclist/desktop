@@ -1,5 +1,5 @@
-const { isKnownDeviceName, matchesPart, nameParts, buildEntries } = require('./known-device-names')
-const data = require('./known-device-names.json')
+const { isKnownDeviceName, matchesPart, nameParts, buildEntries, KNOWN_NAMES_VERSION } = require('./known-device-names')
+const { version, names } = require('./known-device-names.json')
 
 describe('nameParts', () => {
     test('drops serial numbers and MAC fragments', () => {
@@ -73,23 +73,29 @@ describe('buildEntries', () => {
 })
 
 describe('the list that is shipped', () => {
+    test('has a version, a positive whole number that is increased with every change of the list', () => {
+        expect(Number.isInteger(version)).toBe(true)
+        expect(version).toBeGreaterThanOrEqual(1)
+        expect(KNOWN_NAMES_VERSION).toBe(version)
+    })
+
     test('is a list of lower case parts of at least 3 characters (a family: 3 before the *), without duplicates', () => {
-        expect(Array.isArray(data)).toBe(true)
-        for (const entry of data) {
+        expect(Array.isArray(names)).toBe(true)
+        for (const entry of names) {
             expect(entry).toBe(entry.toLowerCase())
             expect(entry).toMatch(/^[a-z0-9]{3,}\*?$/)
         }
-        expect(new Set(data).size).toBe(data.length)
+        expect(new Set(names).size).toBe(names.length)
     })
 
     test('has no redundant entries: nothing that a family of the list matches already', () => {
-        const families = data.filter(e => e.endsWith('*'))
-        const redundant = data.filter(entry => families.some(f => f !== entry && entry.replace('*', '').startsWith(f.slice(0, -1))))
+        const families = names.filter(e => e.endsWith('*'))
+        const redundant = names.filter(entry => families.some(f => f !== entry && entry.replace('*', '').startsWith(f.slice(0, -1))))
         expect(redundant).toEqual([])
     })
 
     test('is sorted, so that a change shows up clearly in a review', () => {
-        expect([...data]).toEqual([...data].sort())
+        expect([...names]).toEqual([...names].sort())
     })
 
     test('contains the parts the maintainers asked for', () => {

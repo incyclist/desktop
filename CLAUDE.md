@@ -235,7 +235,9 @@ WebBLE (Linux) probes every named device in the chooser. Devices that connect bu
 advertise under rotating addresses (speakers, TVs) are blacklisted by name. A hand-maintained list of name parts of
 real trainers and sensors, `src/features/webble/known-device-names.json`, protects them from being blacklisted just
 because they did not respond (they are still blacklisted when they report "unsupported"). See
-`scripts/known-device-names/README.md`. When touching the blacklist or the chooser logic, keep that guarantee.
+`scripts/known-device-names/README.md`. The list has a `version` that must be increased with every change: the block
+list stores it, and a mismatch removes the entries that the list matches. When touching the blacklist or the chooser
+logic, keep that guarantee.
 
 ## Electron Security Configuration
 

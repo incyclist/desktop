@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { getAppDirectory } = require('../../utils')
 const { EventLogger } = require('gd-eventlog')
-const { isKnownDeviceName } = require('./known-device-names')
+const { isKnownDeviceName, KNOWN_NAMES_VERSION } = require('./known-device-names')
 
 const FILE_NAME = 'webble-devices.json'
 
@@ -12,10 +12,13 @@ const BAD_THRESHOLD = 3
 // A blacklisting is permanent: noise (speakers, TVs, smart home devices) is around all the time and would otherwise
 // be probed again and again, which costs scan time and disturbs the connections that are in use. Real trainers and
 // sensors are protected from the one thing that is not definitive: a device that merely did not respond (busy, out of
-// reach, not yet ready) is never put on the failed list when its name contains a part of known-device-names.json,
-// and an older blacklisting caused by failed connects is ignored. A device that connects and reports that it is not
-// a fitness device ("unsupported") is blacklisted, whatever its name. A trainer of a brand that is not on the list
-// yet can be released by deleting its entry (or the file) and by extending the list.
+// reach, not yet ready) is never put on the failed list when its name contains a part of known-device-names.json.
+// A device that connects and reports that it is not a fitness device ("unsupported") is blacklisted, whatever its name.
+//
+// The file stores the version of known-device-names.json it was last cleaned against. If the list has a different
+// version (it was changed, or the file is from an older release), all entries whose name the list matches are removed
+// once, "unsupported" and "did not respond" alike: those devices are probed again, and in the worst case they are
+// blacklisted again by their next probes.
 
 // Devices that advertise under rotating random addresses create a new entry for every address, none of which
 // ever reaches BAD_THRESHOLD. The name is the stable key: once this many different addresses with the same
@@ -49,6 +52,7 @@ class WebBleDeviceCache {
     constructor() {
         this.logger = new EventLogger('WebBLE')
         this.entries = {}   // mac → { name, status: 'good'|'bad', failCount, ts, reason: 'unsupported'|'failures' }
+        this.knownNamesVersion = undefined    // version of known-device-names.json the entries were last cleaned against
         this._load()
     }
 
@@ -57,16 +61,54 @@ class WebBleDeviceCache {
     }
 
     _load() {
+        let existed = false
         try {
             const file = this._filePath()
-            if (fs.existsSync(file))
-                this.entries = JSON.parse(fs.readFileSync(file, 'utf8'))
+            if (fs.existsSync(file)) {
+                const stored = JSON.parse(fs.readFileSync(file, 'utf8'))
+                if (stored && typeof stored.entries === 'object' && 'knownNamesVersion' in stored) {
+                    this.entries = stored.entries
+                    this.knownNamesVersion = stored.knownNamesVersion
+                }
+                else {
+                    // a file of an older release: the entries only, no version
+                    this.entries = stored
+                }
+                existed = true
+            }
         } catch (err) {
             this.logger.logEvent({ message: 'could not load webble device cache', error: err.message })
             this.entries = {}
         }
-        if (this._prune())
+
+        let changed = this._prune()
+        if (!existed) {
+            // nothing to clean in a new file
+            this.knownNamesVersion = KNOWN_NAMES_VERSION
+        }
+        else if (this.knownNamesVersion !== KNOWN_NAMES_VERSION) {
+            this._applyKnownNames()
+            changed = true
+        }
+        if (changed)
             this._save()
+    }
+
+    /**
+     * The list of known device names has another version than the one this file was cleaned against: removes every
+     * entry (unsupported, did not respond, failure counts) whose name the list matches. Devices we use ("good") stay.
+     */
+    _applyKnownNames() {
+        const from = this.knownNamesVersion
+        let removed = 0
+        for (const [mac, entry] of Object.entries(this.entries)) {
+            if (entry.status !== 'good' && isKnownDeviceName(entry.name)) {
+                delete this.entries[mac]
+                removed++
+            }
+        }
+        this.knownNamesVersion = KNOWN_NAMES_VERSION
+        this.logger.logEvent({ message: 'webble device cache: known device names updated', from: from ?? 0, to: KNOWN_NAMES_VERSION, removed })
     }
 
     /**
@@ -101,7 +143,8 @@ class WebBleDeviceCache {
 
     _save() {
         try {
-            fs.writeFileSync(this._filePath(), JSON.stringify(this.entries, null, 2), { encoding: 'utf8' })
+            const content = { knownNamesVersion: this.knownNamesVersion ?? KNOWN_NAMES_VERSION, entries: this.entries }
+            fs.writeFileSync(this._filePath(), JSON.stringify(content, null, 2), { encoding: 'utf8' })
         } catch (err) {
             this.logger.logEvent({ message: 'could not save webble device cache', error: err.message })
         }
@@ -112,12 +155,7 @@ class WebBleDeviceCache {
     }
 
     isBad(mac) {
-        const entry = this.entries[mac]
-        if (entry?.status !== 'bad') return false
-        // a known trainer or sensor is only blacklisted if it said it is not a fitness device. Older entries do not
-        // tell why they were made: they count as "did not respond", and a device that really is unsupported is
-        // blacklisted again by its next probe
-        return !isKnownDeviceName(entry.name) || entry.reason === 'unsupported'
+        return this.entries[mac]?.status === 'bad'
     }
 
     /**

@@ -2,18 +2,18 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { getAppDirectory } = require('../../utils')
 const { EventLogger } = require('gd-eventlog')
+const { isKnownDeviceName } = require('./known-device-names')
 
 const FILE_NAME = 'webble-devices.json'
 
 // probe failures (for a device never explicitly connected to) before it's written off as "bad"
 const BAD_THRESHOLD = 3
 
-// Reputation is not forever: a device that failed because it was busy (e.g. connected to a phone), switched
-// off or mid-update must get another chance - but not the next day (a device that keeps failing, like a smart
-// home gateway, would be probed again every day). Entries without a timestamp (written by older versions) are
-// treated as expired. "Good" entries never expire.
-const HOUR = 60 * 60 * 1000
-const ENTRY_TTL = 7 * 24 * HOUR      // blacklisting (failed connects or wrong kind of device) and failure counts
+// A blacklisting is permanent: noise (speakers, TVs, smart home devices) is around all the time and would otherwise
+// be probed again and again, which costs scan time and disturbs the connections that are in use. The protection of
+// real trainers and sensors is the list of known name parts (known-device-names.json): a device whose name contains
+// one of them is never blacklisted, and an older blacklisting of such a device is ignored. A trainer of a brand that
+// is not on the list yet can be released by deleting its entry (or the file) and by extending the list.
 
 // Devices that advertise under rotating random addresses create a new entry for every address, none of which
 // ever reaches BAD_THRESHOLD. The name is the stable key: once this many different addresses with the same
@@ -22,7 +22,7 @@ const NAME_BAD_MIN_MACS = 3
 
 // keeps the file small, whatever is around the user
 const MAX_ENTRIES_PER_NAME = 10
-const MAX_ENTRIES = 500
+const MAX_ENTRIES = 2000
 
 /**
  * Persists BLE device reputation (by MAC) across app launches, so a device the
@@ -67,19 +67,13 @@ class WebBleDeviceCache {
             this._save()
     }
 
-    _isExpired(entry) {
-        if (entry.status === 'good') return false
-        if (!entry.ts) return true
-        return Date.now() - entry.ts > ENTRY_TTL
-    }
-
-    /** Drops expired entries and keeps the file bounded. @returns true if anything was removed */
+    /**
+     * Keeps the file bounded (not a time limit: a blacklisting is permanent): at most MAX_ENTRIES_PER_NAME failure
+     * records per name and MAX_ENTRIES in total, oldest first. Devices we use are never dropped.
+     * @returns true if anything was removed
+     */
     _prune() {
         const before = Object.keys(this.entries).length
-
-        for (const [mac, entry] of Object.entries(this.entries)) {
-            if (this._isExpired(entry)) delete this.entries[mac]
-        }
 
         const byName = new Map()
         for (const [mac, entry] of Object.entries(this.entries)) {
@@ -88,6 +82,7 @@ class WebBleDeviceCache {
             list.push(mac)
             byName.set(entry.name, list)
         }
+        // entries from older versions have no timestamp: they count as the oldest
         const newestFirst = (a, b) => (this.entries[b].ts ?? 0) - (this.entries[a].ts ?? 0)
         for (const macs of byName.values()) {
             macs.sort(newestFirst).slice(MAX_ENTRIES_PER_NAME).forEach(mac => delete this.entries[mac])
@@ -95,7 +90,6 @@ class WebBleDeviceCache {
 
         const excess = Object.keys(this.entries).length - MAX_ENTRIES
         if (excess > 0) {
-            // oldest failure records go first, devices we use are never dropped
             const oldestFirst = Object.keys(this.entries).filter(mac => this.entries[mac].status !== 'good').sort(newestFirst).reverse()
             oldestFirst.slice(0, excess).forEach(mac => delete this.entries[mac])
         }
@@ -117,20 +111,22 @@ class WebBleDeviceCache {
 
     isBad(mac) {
         const entry = this.entries[mac]
-        return entry?.status === 'bad' && !this._isExpired(entry)
+        // the name of a known trainer or sensor wins over an (older) blacklisting
+        return entry?.status === 'bad' && !isKnownDeviceName(entry.name)
     }
 
     /**
      * True if several different addresses with this name failed and none with that name ever worked: the
-     * signature of a device that advertises under rotating addresses (speakers, earbuds, TVs).
+     * signature of a device that advertises under rotating addresses (speakers, earbuds, TVs). Never true for the
+     * name of a known trainer or sensor.
      */
     isNameBad(name) {
-        if (!name) return false
+        if (!name || isKnownDeviceName(name)) return false
         let failed = 0
         for (const entry of Object.values(this.entries)) {
             if (entry.name !== name) continue
             if (entry.status === 'good') return false
-            if (!this._isExpired(entry) && (entry.status === 'bad' || entry.failCount > 0)) failed++
+            if (entry.status === 'bad' || entry.failCount > 0) failed++
         }
         return failed >= NAME_BAD_MIN_MACS
     }
@@ -143,7 +139,7 @@ class WebBleDeviceCache {
      * recordFailure() does. Still never downgrades an explicitly-wanted device.
      */
     markBad(mac, name) {
-        if (!mac || this.isGood(mac)) return
+        if (!mac || this.isGood(mac) || isKnownDeviceName(name)) return
         this.entries[mac] = { name, status: 'bad', failCount: this.entries[mac]?.failCount ?? BAD_THRESHOLD, ts: Date.now(), reason: 'unsupported' }
         this.logger.logEvent({ message: 'webble device cache: marked bad (unsupported device type)', deviceId: mac, name })
         this._prune()
@@ -173,10 +169,9 @@ class WebBleDeviceCache {
      * the session-local cooldown/parking is for instead.
      */
     recordFailure(mac, name) {
-        if (!mac || this.isGood(mac)) return
+        if (!mac || this.isGood(mac) || isKnownDeviceName(name)) return
 
-        const known = this.entries[mac]
-        const entry = known && !this._isExpired(known) ? known : { name, status: undefined, failCount: 0 }
+        const entry = this.entries[mac] ?? { name, status: undefined, failCount: 0 }
         entry.name = name ?? entry.name
         entry.failCount = (entry.failCount ?? 0) + 1
         entry.ts = Date.now()

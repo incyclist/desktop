@@ -3,6 +3,7 @@ const { ipcHandleNoResponse, ipcHandleSync, ipcCallSync, ipcCallNoResponse } = r
 const Feature = require('../base')
 const WebBleIpcBinding = require('./ipc-binding')
 const WebBleDeviceCache = require('./device-cache')
+const { isKnownDeviceName } = require('./known-device-names')
 const { EventLogger } = require('gd-eventlog')
 
 const CONNECT_TARGET_TIMEOUT = 30 * 1000
@@ -140,7 +141,8 @@ class WebBleFeature extends Feature {
      * Devices we use (explicit connect target / known good) and names with a working device are never blocked.
      */
     _nameBlockReason(name, deviceId) {
-        if (!name || this._isWorkingDevice(deviceId) || this._nameHasWorkingDevice(name)) return undefined
+        // the name of a known trainer or sensor (see known-device-names.json) is never blocked
+        if (!name || isKnownDeviceName(name) || this._isWorkingDevice(deviceId) || this._nameHasWorkingDevice(name)) return undefined
         if (this._recentNameFailures(name).length >= NAME_BLOCK_MIN_MACS) return 'name-blocked'
         if (this.deviceCache.isNameBad(name)) return 'name-blacklisted'
         return undefined
@@ -151,7 +153,7 @@ class WebBleFeature extends Feature {
     }
 
     _recordNameFailure(deviceId, name) {
-        if (!name) return
+        if (!name || isKnownDeviceName(name)) return
         const wasBlocked = this._recentNameFailures(name).length >= NAME_BLOCK_MIN_MACS
         const failures = this.nameFailures.get(name) ?? new Map()
         failures.set(deviceId, Date.now())

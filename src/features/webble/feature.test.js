@@ -1,3 +1,8 @@
+// the whitelist is tested in known-device-names.test.js: here a name starting with "known" counts as known
+jest.mock('./known-device-names', () => ({
+    isKnownDeviceName: jest.fn(name => /^known/i.test(name ?? '')),
+}))
+
 jest.mock('electron', () => ({
     app: {
         on: jest.fn(),
@@ -379,6 +384,17 @@ describe('WebBleFeature — cooldown by device name', () => {
 
         expect(feature._nameBlockReason('JBL', 'target')).toBeUndefined()
         expect(feature._nameBlockReason('Volt', 'other')).toBeUndefined()
+    })
+
+    test('a known trainer name is never blocked, however often devices with that name fail', () => {
+        feature.reportProbeFailed('aa', 'KnownTrainer 1111')
+        feature.reportProbeFailed('bb', 'KnownTrainer 2222')
+        feature.reportUnsupportedDevice('cc', 'KnownTrainer 3333')
+        feature.deviceCache.isNameBad.mockReturnValue(true)
+
+        expect(feature._nameBlockReason('KnownTrainer 4444', 'dd')).toBeUndefined()
+        expect(approve(named('KnownTrainer 4444', 'dd'))).toHaveBeenCalledWith('dd')
+        expect(feature.logger.logEvent).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'name cooldown' }))
     })
 
     test('the name cooldown is logged once, when it starts', () => {

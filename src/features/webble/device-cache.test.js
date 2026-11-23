@@ -1,3 +1,8 @@
+// the whitelist is tested in known-device-names.test.js: here a name starting with "known" counts as known
+jest.mock('./known-device-names', () => ({
+    isKnownDeviceName: jest.fn(name => /^known/i.test(name ?? '')),
+}))
+
 jest.mock('fs')
 jest.mock('../../utils', () => ({
     getAppDirectory: jest.fn(() => '/fake/app/dir'),
@@ -189,9 +194,9 @@ describe('WebBleDeviceCache — recordFailure', () => {
 
 })
 
-const HOUR = 60 * 60 * 1000
+const DAY = 24 * 60 * 60 * 1000
 
-describe('WebBleDeviceCache — expiry', () => {
+describe('WebBleDeviceCache — a blacklisting is permanent', () => {
 
     const load = (entries) => {
         fs.existsSync.mockReturnValue(true)
@@ -199,47 +204,24 @@ describe('WebBleDeviceCache — expiry', () => {
         return new WebBleDeviceCache()
     }
 
-    test('a blacklisting after failed connects expires after 7 days, not the next day', () => {
+    test('a blacklisting stays, however old it is', () => {
         const cache = load({
-            nextDay: { name: 'X', status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - 25 * HOUR },
-            fresh: { name: 'X', status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - 6 * 24 * HOUR },
-            old: { name: 'X', status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - 8 * 24 * HOUR },
+            week: { name: 'X', status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - 8 * DAY },
+            year: { name: 'X', status: 'bad', failCount: 3, reason: 'unsupported', ts: Date.now() - 400 * DAY },
         })
-        expect(cache.isBad('nextDay')).toBe(true)
-        expect(cache.isBad('fresh')).toBe(true)
-        expect(cache.isBad('old')).toBe(false)
+        expect(cache.isBad('week')).toBe(true)
+        expect(cache.isBad('year')).toBe(true)
     })
 
-    test('a device confirmed unsupported expires after 7 days as well', () => {
-        const cache = load({
-            fresh: { name: 'X', status: 'bad', failCount: 3, reason: 'unsupported', ts: Date.now() - 6 * 24 * HOUR },
-            old: { name: 'X', status: 'bad', failCount: 3, reason: 'unsupported', ts: Date.now() - 8 * 24 * HOUR },
-        })
-        expect(cache.isBad('fresh')).toBe(true)
-        expect(cache.isBad('old')).toBe(false)
+    test('entries written by older versions (no timestamp) are kept', () => {
+        const cache = load({ legacy: { name: 'JBL PartyBox', status: 'bad', failCount: 3 } })
+        expect(cache.isBad('legacy')).toBe(true)
     })
 
-    test('entries written by older versions (no timestamp) are dropped once, and the file is rewritten', () => {
-        const cache = load({
-            legacyBad: { name: 'JBL PartyBox', status: 'bad', failCount: 3 },
-            legacyGood: { name: 'Volt', status: 'good', failCount: 0 },
-        })
-        expect(cache.isBad('legacyBad')).toBe(false)
-        expect(cache.entries.legacyBad).toBeUndefined()
-        expect(cache.isGood('legacyGood')).toBe(true)
-        expect(fs.writeFileSync).toHaveBeenCalled()
-    })
-
-    test('good devices never expire', () => {
-        const cache = load({ trainer: { name: 'Volt', status: 'good', failCount: 0, ts: Date.now() - 400 * 24 * HOUR } })
-        expect(cache.isGood('trainer')).toBe(true)
-    })
-
-    test('failure counts expire too: old failures do not add up to a blacklisting', () => {
-        const cache = load({ aa: { name: 'X', failCount: 2, ts: Date.now() - 8 * 24 * HOUR } })
+    test('failure counts add up across sessions, however far apart', () => {
+        const cache = load({ aa: { name: 'X', failCount: 2, ts: Date.now() - 100 * DAY } })
         cache.recordFailure('aa', 'X')
-        expect(cache.entries.aa.failCount).toBe(1)
-        expect(cache.isBad('aa')).toBe(false)
+        expect(cache.isBad('aa')).toBe(true)
     })
 
     test('a new blacklisting records when and why it happened', () => {
@@ -248,6 +230,55 @@ describe('WebBleDeviceCache — expiry', () => {
         expect(cache.entries.aa).toEqual(expect.objectContaining({ status: 'bad', reason: 'unsupported', ts: expect.any(Number) }))
         for (let i = 0; i < 3; i++) cache.recordFailure('bb', 'Other')
         expect(cache.entries.bb).toEqual(expect.objectContaining({ status: 'bad', reason: 'failures', ts: expect.any(Number) }))
+    })
+
+    test('good devices stay good', () => {
+        const cache = load({ trainer: { name: 'Volt', status: 'good', failCount: 0, ts: Date.now() - 400 * DAY } })
+        expect(cache.isGood('trainer')).toBe(true)
+    })
+})
+
+describe('WebBleDeviceCache — known trainer and sensor names are never banned', () => {
+
+    const load = (entries) => {
+        fs.existsSync.mockReturnValue(true)
+        fs.readFileSync.mockReturnValue(JSON.stringify(entries))
+        return new WebBleDeviceCache()
+    }
+
+    test('a device with a known name is not blacklisted, whatever happens to it', () => {
+        const cache = new WebBleDeviceCache()
+        cache.markBad('aa', 'KnownTrainer 1234')
+        for (let i = 0; i < 5; i++) cache.recordFailure('bb', 'KnownTrainer 5678')
+
+        expect(cache.isBad('aa')).toBe(false)
+        expect(cache.isBad('bb')).toBe(false)
+        expect(cache.entries.aa).toBeUndefined()
+        expect(cache.entries.bb).toBeUndefined()
+    })
+
+    test('an earlier blacklisting of a device with a known name is ignored: a wrongly banned trainer is released by a list update', () => {
+        const cache = load({
+            wrong: { name: 'KnownTrainer 1234', status: 'bad', failCount: 3, reason: 'unsupported', ts: Date.now() - 30 * DAY },
+            noise: { name: 'JBL PartyBox', status: 'bad', failCount: 3, reason: 'unsupported', ts: Date.now() - 30 * DAY },
+        })
+        expect(cache.isBad('wrong')).toBe(false)
+        expect(cache.isBad('noise')).toBe(true)
+    })
+
+    test('the name verdict never applies to a known name', () => {
+        const cache = load({
+            a1: { name: 'KnownTrainer', status: 'bad', failCount: 3, ts: 1 },
+            a2: { name: 'KnownTrainer', status: 'bad', failCount: 3, ts: 2 },
+            a3: { name: 'KnownTrainer', status: 'bad', failCount: 3, ts: 3 },
+        })
+        expect(cache.isNameBad('KnownTrainer')).toBe(false)
+    })
+
+    test('other names are treated as before', () => {
+        const cache = new WebBleDeviceCache()
+        cache.markBad('aa', 'JBL PartyBox')
+        expect(cache.isBad('aa')).toBe(true)
     })
 })
 
@@ -294,13 +325,11 @@ describe('WebBleDeviceCache — name verdict (rotating addresses)', () => {
         expect(cache.isNameBad(undefined)).toBe(false)
     })
 
-    test('the verdict ends when the failures expire', () => {
+    test('the verdict is permanent', () => {
         for (const mac of ['a1', 'a2', 'a3']) cache.recordFailure(mac, 'JBL')
+        for (const entry of Object.values(cache.entries)) entry.ts = Date.now() - 400 * DAY
+
         expect(cache.isNameBad('JBL')).toBe(true)
-
-        for (const entry of Object.values(cache.entries)) entry.ts = Date.now() - 8 * 24 * HOUR
-
-        expect(cache.isNameBad('JBL')).toBe(false)
     })
 })
 
@@ -323,10 +352,10 @@ describe('WebBleDeviceCache — size limits', () => {
     test('the total size is capped, and good devices are never dropped', () => {
         const cache = new WebBleDeviceCache()
         cache.markGood('mine', 'Volt')
-        for (let i = 0; i < 700; i++) cache.entries[`dev${i}`] = { name: `Name ${i}`, status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - i }
+        for (let i = 0; i < 2300; i++) cache.entries[`dev${i}`] = { name: `Name ${i}`, status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - i }
         cache.markBad('trigger', 'Other')
 
-        expect(Object.keys(cache.entries).length).toBeLessThanOrEqual(500)
+        expect(Object.keys(cache.entries).length).toBeLessThanOrEqual(2000)
         expect(cache.isGood('mine')).toBe(true)
     })
 })

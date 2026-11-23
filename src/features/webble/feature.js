@@ -135,12 +135,19 @@ class WebBleFeature extends Feature {
     }
 
     /**
-     * A device is skipped by name if its name keeps failing under different addresses (rotating address).
+     * Why a device is skipped by its name (undefined if it is not): its name keeps failing under different
+     * addresses, in this session ('name-blocked') or according to the persisted history ('name-blacklisted').
      * Devices we use (explicit connect target / known good) and names with a working device are never blocked.
      */
+    _nameBlockReason(name, deviceId) {
+        if (!name || this._isWorkingDevice(deviceId) || this._nameHasWorkingDevice(name)) return undefined
+        if (this._recentNameFailures(name).length >= NAME_BLOCK_MIN_MACS) return 'name-blocked'
+        if (this.deviceCache.isNameBad(name)) return 'name-blacklisted'
+        return undefined
+    }
+
     _isNameBlocked(name, deviceId) {
-        if (!name || this._isWorkingDevice(deviceId) || this._nameHasWorkingDevice(name)) return false
-        return this._recentNameFailures(name).length >= NAME_BLOCK_MIN_MACS
+        return this._nameBlockReason(name, deviceId) !== undefined
     }
 
     _recordNameFailure(deviceId, name) {
@@ -307,7 +314,8 @@ class WebBleFeature extends Feature {
     _skipReason(d) {
         if (this.discoveredDeviceIds.has(d.deviceId)) return 'already-approved'
         if (!this._isUsableName(d.deviceName, d.deviceId)) return 'no-name'
-        if (this._isNameBlocked(d.deviceName, d.deviceId)) return 'name-blocked'
+        const nameReason = this._nameBlockReason(d.deviceName, d.deviceId)
+        if (nameReason) return nameReason
         if (this.deviceCache.isBad(d.deviceId)) return 'blacklisted'
         return undefined
     }

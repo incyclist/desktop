@@ -5,9 +5,24 @@ const { EventLogger } = require('gd-eventlog')
 
 const FILE_NAME = 'webble-devices.json'
 
-// consecutive probe failures (for a device never explicitly connected to) before
-// it's written off as "bad" and excluded from the chooser for good
+// probe failures (for a device never explicitly connected to) before it's written off as "bad"
 const BAD_THRESHOLD = 3
+
+// Reputation is not forever: a device that failed because it was busy (e.g. connected to a phone), switched
+// off or mid-update must get another chance. Entries without a timestamp (written by older versions) are
+// treated as expired. "Good" entries never expire.
+const HOUR = 60 * 60 * 1000
+const FAILURE_TTL = 7* 24 * HOUR              // blacklisted after failed connects, and the failure counts
+const UNSUPPORTED_TTL = 7 * 24 * HOUR      // connected fine, but it is the wrong kind of device
+
+// Devices that advertise under rotating random addresses create a new entry for every address, none of which
+// ever reaches BAD_THRESHOLD. The name is the stable key: once this many different addresses with the same
+// name failed (and none with that name works), the name itself is written off.
+const NAME_BAD_MIN_MACS = 3
+
+// keeps the file small, whatever is around the user
+const MAX_ENTRIES_PER_NAME = 10
+const MAX_ENTRIES = 500
 
 /**
  * Persists BLE device reputation (by MAC) across app launches, so a device the
@@ -31,7 +46,7 @@ class WebBleDeviceCache {
 
     constructor() {
         this.logger = new EventLogger('WebBLE')
-        this.entries = {}   // mac → { name, status: 'good'|'bad', failCount }
+        this.entries = {}   // mac → { name, status: 'good'|'bad', failCount, ts, reason: 'unsupported'|'failures' }
         this._load()
     }
 
@@ -48,6 +63,45 @@ class WebBleDeviceCache {
             this.logger.logEvent({ message: 'could not load webble device cache', error: err.message })
             this.entries = {}
         }
+        if (this._prune())
+            this._save()
+    }
+
+    _isExpired(entry) {
+        if (entry.status === 'good') return false
+        if (!entry.ts) return true
+        const ttl = entry.status === 'bad' && entry.reason === 'unsupported' ? UNSUPPORTED_TTL : FAILURE_TTL
+        return Date.now() - entry.ts > ttl
+    }
+
+    /** Drops expired entries and keeps the file bounded. @returns true if anything was removed */
+    _prune() {
+        const before = Object.keys(this.entries).length
+
+        for (const [mac, entry] of Object.entries(this.entries)) {
+            if (this._isExpired(entry)) delete this.entries[mac]
+        }
+
+        const byName = new Map()
+        for (const [mac, entry] of Object.entries(this.entries)) {
+            if (entry.status === 'good') continue
+            const list = byName.get(entry.name) ?? []
+            list.push(mac)
+            byName.set(entry.name, list)
+        }
+        const newestFirst = (a, b) => (this.entries[b].ts ?? 0) - (this.entries[a].ts ?? 0)
+        for (const macs of byName.values()) {
+            macs.sort(newestFirst).slice(MAX_ENTRIES_PER_NAME).forEach(mac => delete this.entries[mac])
+        }
+
+        const excess = Object.keys(this.entries).length - MAX_ENTRIES
+        if (excess > 0) {
+            // oldest failure records go first, devices we use are never dropped
+            const oldestFirst = Object.keys(this.entries).filter(mac => this.entries[mac].status !== 'good').sort(newestFirst).reverse()
+            oldestFirst.slice(0, excess).forEach(mac => delete this.entries[mac])
+        }
+
+        return Object.keys(this.entries).length !== before
     }
 
     _save() {
@@ -63,7 +117,23 @@ class WebBleDeviceCache {
     }
 
     isBad(mac) {
-        return this.entries[mac]?.status === 'bad'
+        const entry = this.entries[mac]
+        return entry?.status === 'bad' && !this._isExpired(entry)
+    }
+
+    /**
+     * True if several different addresses with this name failed and none with that name ever worked: the
+     * signature of a device that advertises under rotating addresses (speakers, earbuds, TVs).
+     */
+    isNameBad(name) {
+        if (!name) return false
+        let failed = 0
+        for (const entry of Object.values(this.entries)) {
+            if (entry.name !== name) continue
+            if (entry.status === 'good') return false
+            if (!this._isExpired(entry) && (entry.status === 'bad' || entry.failCount > 0)) failed++
+        }
+        return failed >= NAME_BAD_MIN_MACS
     }
 
     /**
@@ -75,8 +145,9 @@ class WebBleDeviceCache {
      */
     markBad(mac, name) {
         if (!mac || this.isGood(mac)) return
-        this.entries[mac] = { name, status: 'bad', failCount: this.entries[mac]?.failCount ?? BAD_THRESHOLD }
+        this.entries[mac] = { name, status: 'bad', failCount: this.entries[mac]?.failCount ?? BAD_THRESHOLD, ts: Date.now(), reason: 'unsupported' }
         this.logger.logEvent({ message: 'webble device cache: marked bad (unsupported device type)', deviceId: mac, name })
+        this._prune()
         this._save()
     }
 
@@ -92,7 +163,7 @@ class WebBleDeviceCache {
      */
     markGood(mac, name) {
         if (!mac || this.isGood(mac)) return
-        this.entries[mac] = { name, status: 'good', failCount: 0 }
+        this.entries[mac] = { name, status: 'good', failCount: 0, ts: Date.now() }
         this.logger.logEvent({ message: 'webble device cache: marked good', deviceId: mac, name })
         this._save()
     }
@@ -105,14 +176,20 @@ class WebBleDeviceCache {
     recordFailure(mac, name) {
         if (!mac || this.isGood(mac)) return
 
-        const entry = this.entries[mac] ?? { name, status: undefined, failCount: 0 }
+        const known = this.entries[mac]
+        const entry = known && !this._isExpired(known) ? known : { name, status: undefined, failCount: 0 }
         entry.name = name ?? entry.name
         entry.failCount = (entry.failCount ?? 0) + 1
-        if (entry.failCount >= BAD_THRESHOLD) entry.status = 'bad'
+        entry.ts = Date.now()
+        if (entry.failCount >= BAD_THRESHOLD) {
+            entry.status = 'bad'
+            entry.reason = entry.reason ?? 'failures'
+        }
         this.entries[mac] = entry
 
         if (entry.status === 'bad')
             this.logger.logEvent({ message: 'webble device cache: marked bad', deviceId: mac, name: entry.name, failCount: entry.failCount })
+        this._prune()
         this._save()
     }
 }

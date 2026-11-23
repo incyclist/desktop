@@ -23,6 +23,7 @@ jest.mock('./device-cache', () => ({
     getInstance: jest.fn(() => ({
         isGood: jest.fn().mockReturnValue(false),
         isBad: jest.fn().mockReturnValue(false),
+        isNameBad: jest.fn().mockReturnValue(false),
         markGood: jest.fn(),
         markBad: jest.fn(),
         recordFailure: jest.fn(),
@@ -362,6 +363,22 @@ describe('WebBleFeature — cooldown by device name', () => {
         feature.reportProbeFailed('bb', 'Volt')
 
         expect(feature._isNameBlocked('Volt', 'cc')).toBe(false)
+    })
+
+    test('a name blacklisted by the persisted history is skipped from the first scan, with its own reason', () => {
+        feature.deviceCache.isNameBad.mockImplementation(name => name === 'JBL PartyBox')
+
+        expect(feature._nameBlockReason('JBL PartyBox', 'zz')).toBe('name-blacklisted')
+        expect(approve(named('JBL PartyBox', 'zz'))).not.toHaveBeenCalled()
+    })
+
+    test('the persisted name verdict never hides a device we use, or a name with a working device', () => {
+        feature.deviceCache.isNameBad.mockReturnValue(true)
+        feature.connectTargetMacs.add('target')
+        feature.deviceMacsByName.set('Volt', new Set(['target']))
+
+        expect(feature._nameBlockReason('JBL', 'target')).toBeUndefined()
+        expect(feature._nameBlockReason('Volt', 'other')).toBeUndefined()
     })
 
     test('the name cooldown is logged once, when it starts', () => {

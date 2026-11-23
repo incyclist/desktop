@@ -229,6 +229,49 @@ function ipcRegisterBroadcast( api, ipcEvent,ipcRenderer) {
 }
 
 
+/**
+ * Renderer side: returns a subscribe function for a broadcast event channel. Each call
+ * registers one listener and returns a function that removes just that listener.
+ */
+function ipcSubscribe( ipcEvent, ipcRenderer) {
+    try {
+        return (callback) => {
+            try {
+                if (typeof callback !== 'function')
+                    return () => {}
+
+                // a throwing listener must not propagate into the renderer's IPC dispatch
+                const onEvent = (_ipcEventInfo, ...args) => {
+                    try {
+                        callback(...args)
+                    }
+                    catch (err) {
+                        console.log( `ERROR in IPC listener ${ipcEvent}: ${err?.message}`)
+                    }
+                }
+                ipcRenderer.on( ipcEvent, onEvent)
+                return () => {
+                    try {
+                        ipcRenderer.removeListener( ipcEvent, onEvent)
+                    }
+                    catch (err) {
+                        console.log( `ERROR in IPC unsubscribe ${ipcEvent}: ${err?.message}`)
+                    }
+                }
+            }
+            catch (err) {
+                console.log( `ERROR in IPC subscribe ${ipcEvent}: ${err?.message}`)
+                return () => {}
+            }
+        }
+    }
+    catch (err) {
+        console.log( `ERROR in IPC subscribe ${ipcEvent}: ${err?.message}`)
+        return () => () => {}
+    }
+}
+
+
 function ipcSendEvent( event, ...args) {
     if (process.env.IPC_DEBUG)
         console.log(`ipcBroadcast: ${event} `)
@@ -324,7 +367,7 @@ function getCpuInfo() {
 
 
 module.exports = {
-    getFileInfo, serveFile, ipcCall,ipcCallSync, ipcCallNoResponse, ipcHandle, ipcHandleSync, ipcHandleNoResponse, ipcRegisterBroadcast, ipcServe,ipcServeSync,ipcSendEvent, ipcResponse,isTrue,getCpuInfo,
+    getFileInfo, serveFile, ipcCall,ipcCallSync, ipcCallNoResponse, ipcHandle, ipcHandleSync, ipcHandleNoResponse, ipcRegisterBroadcast, ipcSubscribe, ipcServe,ipcServeSync,ipcSendEvent, ipcResponse,isTrue,getCpuInfo,
     isTrue   
     
 };

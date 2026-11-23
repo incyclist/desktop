@@ -640,7 +640,7 @@ describe('WebBleIpcBinding — _processDiscoveredDevice', () => {
         expect(discovered[0].advertisement.serviceUuids).not.toContain('180d')
     })
 
-    test('probe failure: retries within the same probe (via _gattConnect) before giving up', async () => {
+    test('probe failure: a probe makes a single attempt, so it cannot hold up the other devices in the list', async () => {
         const device = makeBleDevice('dev-1', 'KICKR CORE')
         device.gatt.connect
             .mockRejectedValueOnce(new Error('flaky'))
@@ -651,9 +651,25 @@ describe('WebBleIpcBinding — _processDiscoveredDevice', () => {
 
         await binding._processDiscoveredDevice(device, true)
 
+        expect(device.gatt.connect).toHaveBeenCalledTimes(1)
+        expect(discovered).toHaveLength(0)
+        expect(api.reportProbeFailed).toHaveBeenCalledTimes(1)
+    })
+
+    test('probe failure: the device is probed again on its next encounter (after the others had their turn)', async () => {
+        const device = makeBleDevice('dev-1', 'KICKR CORE')
+        device.gatt.connect
+            .mockRejectedValueOnce(new Error('flaky'))
+            .mockResolvedValueOnce(makeGattServer(['1826']))
+
+        const discovered = []
+        binding.on('discover', p => discovered.push(p))
+
+        await binding._processDiscoveredDevice(device, true)
+        await binding._processDiscoveredDevice(device, true)
+
         expect(device.gatt.connect).toHaveBeenCalledTimes(2)
         expect(discovered).toHaveLength(1)
-        expect(discovered[0].advertisement.serviceUuids).toEqual(['1826'])
     })
 
     test('probe failure: emits nothing and stays retryable — succeeds on next encounter', async () => {

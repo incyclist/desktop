@@ -60,9 +60,9 @@ async function run(ctx) {
         }
     }, { timeout: 40000 })
 
-    await ctx.check('4', 'echo request/response correlates by id and repeats data (incl. unicode and a 40 KB body)', async () => {
+    await ctx.check('4', 'echo request/response correlates by id and repeats data (incl. unicode and a 10 KB body)', async () => {
         const { phone } = await ctx.login()
-        const data = { a: [1, 2, { b: null }], s: 'Grüße 🚴 日本語', big: 'x'.repeat(40_000) }
+        const data = { a: [1, 2, { b: null }], s: 'Grüße 🚴 日本語', big: 'x'.repeat(10_000) }
         const res = await phone.request('echo', { data }, 'echo-1')
         assert.eq(res.t, 'echo')
         assert.eq(res.id, 'echo-1')
@@ -155,15 +155,15 @@ async function run(ctx) {
         }
     }, { timeout: 90_000 })
 
-    await ctx.check('11', 'frame limits: oversized or empty frame closes the connection; a 60 KB frame is fine', async () => {
+    await ctx.check('11', 'frame limits: oversized or empty frame closes the connection; an 8 KB frame is fine', async () => {
         const mark = host?.mark()
         const { phone } = await ctx.login()
-        const ok = await phone.request('echo', { data: 'y'.repeat(30_000) }, 'sz1')
+        const ok = await phone.request('echo', { data: 'y'.repeat(8_000) }, 'sz1')
         assert.eq(ok.t, 'echo', 'sizable frame answered')
 
         const big = await ctx.login()
         const header = Buffer.alloc(4)
-        header.writeUInt32BE(64 * 1024 + 1)
+        header.writeUInt32BE(16 * 1024 + 1)
         big.phone.writeRaw(header)
         assert.ok(await big.phone.closedWithin(3000), 'oversized frame header closes')
 

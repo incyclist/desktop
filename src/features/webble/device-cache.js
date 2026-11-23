@@ -9,11 +9,11 @@ const FILE_NAME = 'webble-devices.json'
 const BAD_THRESHOLD = 3
 
 // Reputation is not forever: a device that failed because it was busy (e.g. connected to a phone), switched
-// off or mid-update must get another chance. Entries without a timestamp (written by older versions) are
+// off or mid-update must get another chance - but not the next day (a device that keeps failing, like a smart
+// home gateway, would be probed again every day). Entries without a timestamp (written by older versions) are
 // treated as expired. "Good" entries never expire.
 const HOUR = 60 * 60 * 1000
-const FAILURE_TTL = 7* 24 * HOUR              // blacklisted after failed connects, and the failure counts
-const UNSUPPORTED_TTL = 7 * 24 * HOUR      // connected fine, but it is the wrong kind of device
+const ENTRY_TTL = 7 * 24 * HOUR      // blacklisting (failed connects or wrong kind of device) and failure counts
 
 // Devices that advertise under rotating random addresses create a new entry for every address, none of which
 // ever reaches BAD_THRESHOLD. The name is the stable key: once this many different addresses with the same
@@ -70,8 +70,7 @@ class WebBleDeviceCache {
     _isExpired(entry) {
         if (entry.status === 'good') return false
         if (!entry.ts) return true
-        const ttl = entry.status === 'bad' && entry.reason === 'unsupported' ? UNSUPPORTED_TTL : FAILURE_TTL
-        return Date.now() - entry.ts > ttl
+        return Date.now() - entry.ts > ENTRY_TTL
     }
 
     /** Drops expired entries and keeps the file bounded. @returns true if anything was removed */

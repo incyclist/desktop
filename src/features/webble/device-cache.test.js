@@ -199,16 +199,18 @@ describe('WebBleDeviceCache — expiry', () => {
         return new WebBleDeviceCache()
     }
 
-    test('a blacklisting after failed connects expires after 24 hours', () => {
+    test('a blacklisting after failed connects expires after 7 days, not the next day', () => {
         const cache = load({
-            fresh: { name: 'X', status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - 23 * HOUR },
-            old: { name: 'X', status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - 25 * HOUR },
+            nextDay: { name: 'X', status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - 25 * HOUR },
+            fresh: { name: 'X', status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - 6 * 24 * HOUR },
+            old: { name: 'X', status: 'bad', failCount: 3, reason: 'failures', ts: Date.now() - 8 * 24 * HOUR },
         })
+        expect(cache.isBad('nextDay')).toBe(true)
         expect(cache.isBad('fresh')).toBe(true)
         expect(cache.isBad('old')).toBe(false)
     })
 
-    test('a device confirmed unsupported stays blacklisted for 7 days', () => {
+    test('a device confirmed unsupported expires after 7 days as well', () => {
         const cache = load({
             fresh: { name: 'X', status: 'bad', failCount: 3, reason: 'unsupported', ts: Date.now() - 6 * 24 * HOUR },
             old: { name: 'X', status: 'bad', failCount: 3, reason: 'unsupported', ts: Date.now() - 8 * 24 * HOUR },
@@ -234,7 +236,7 @@ describe('WebBleDeviceCache — expiry', () => {
     })
 
     test('failure counts expire too: old failures do not add up to a blacklisting', () => {
-        const cache = load({ aa: { name: 'X', failCount: 2, ts: Date.now() - 25 * HOUR } })
+        const cache = load({ aa: { name: 'X', failCount: 2, ts: Date.now() - 8 * 24 * HOUR } })
         cache.recordFailure('aa', 'X')
         expect(cache.entries.aa.failCount).toBe(1)
         expect(cache.isBad('aa')).toBe(false)
@@ -296,7 +298,7 @@ describe('WebBleDeviceCache — name verdict (rotating addresses)', () => {
         for (const mac of ['a1', 'a2', 'a3']) cache.recordFailure(mac, 'JBL')
         expect(cache.isNameBad('JBL')).toBe(true)
 
-        for (const entry of Object.values(cache.entries)) entry.ts = Date.now() - 25 * HOUR
+        for (const entry of Object.values(cache.entries)) entry.ts = Date.now() - 8 * 24 * HOUR
 
         expect(cache.isNameBad('JBL')).toBe(false)
     })

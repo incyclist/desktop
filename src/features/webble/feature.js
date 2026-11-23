@@ -44,6 +44,7 @@ class WebBleFeature extends Feature {
         this.pendingCallback = null          // parked select-bluetooth-device callback
         this.lastDeviceList = []             // device list of the most recent event
         this.discoveredDeviceIds = new Set() // MACs approved in the current scan
+        this.skipLoggedIds = new Set()       // MACs whose skip reason was logged in the current scan
 
         // deviceName → Set<MAC>. Device names are NOT unique (e.g. two "Zwift Click"
         // controllers), so a name can map to several MACs.
@@ -270,11 +271,8 @@ class WebBleFeature extends Feature {
         if (this.scanning) {
             // Devices known to never work (persisted, repeated failures) are
             // excluded outright — not even as a last resort.
-            const candidates = deviceList.filter(d =>
-                !this.discoveredDeviceIds.has(d.deviceId) &&
-                this._isUsableName(d.deviceName, d.deviceId) &&
-                !this._isNameBlocked(d.deviceName, d.deviceId) &&
-                !this.deviceCache.isBad(d.deviceId))
+            this._logSkippedDevices(deviceList)
+            const candidates = deviceList.filter(d => !this._skipReason(d))
 
             // tier 1: a device we already know we want (this session or a previous
             // one) always wins, regardless of chooser order or cooldown.
@@ -302,11 +300,36 @@ class WebBleFeature extends Feature {
         }
     }
 
+    /**
+     * Why a device in the chooser list is not a candidate (undefined if it is one). Order matters: the first
+     * matching reason is reported.
+     */
+    _skipReason(d) {
+        if (this.discoveredDeviceIds.has(d.deviceId)) return 'already-approved'
+        if (!this._isUsableName(d.deviceName, d.deviceId)) return 'no-name'
+        if (this._isNameBlocked(d.deviceName, d.deviceId)) return 'name-blocked'
+        if (this.deviceCache.isBad(d.deviceId)) return 'blacklisted'
+        return undefined
+    }
+
+    // once per device and scan: the chooser re-fires constantly, and the reason is what is needed to understand
+    // why a device that is in range never gets approved. Only the address is logged (as in select-bluetooth-device)
+    _logSkippedDevices(deviceList) {
+        for (const d of deviceList) {
+            if (this.skipLoggedIds.has(d.deviceId)) continue
+            const reason = this._skipReason(d)
+            if (!reason || reason === 'already-approved') continue
+            this.skipLoggedIds.add(d.deviceId)
+            this.logger.logEvent({ message: 'skipping device', deviceId: d.deviceId, reason })
+        }
+    }
+
     startScan(serviceUUIDs, allowDuplicates) {
         this.logger.logEvent({ message: 'startScan', serviceUUIDs, allowDuplicates })
         this.scanning = true
         this.pendingCallback = null
         this.discoveredDeviceIds = new Set()
+        this.skipLoggedIds = new Set()
         this._lastLoggedDeviceIds = null
         this._triggerScanIteration()
     }

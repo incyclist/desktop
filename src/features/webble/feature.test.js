@@ -374,6 +374,58 @@ describe('WebBleFeature — cooldown by device name', () => {
     })
 })
 
+// ── skipping device log ─────────────────────────────────────────────────────────
+
+describe('WebBleFeature — skipping device log', () => {
+
+    let feature
+    const makeEvent = () => ({ preventDefault: jest.fn() })
+    const skipEvents = () => feature.logger.logEvent.mock.calls.map(c => c[0]).filter(e => e.message === 'skipping device')
+
+    beforeEach(() => {
+        feature = new WebBleFeature()
+        feature.logger.logEvent = jest.fn()
+        feature.scanning = true
+    })
+
+    test('logs why a device is not a candidate: placeholder name, blacklisted, blocked name', () => {
+        feature.deviceCache.isBad.mockImplementation(mac => mac === 'bad')
+        feature.reportProbeFailed('x1', 'JBL')
+        feature.reportProbeFailed('x2', 'JBL')
+        feature.logger.logEvent.mockClear()
+
+        feature._onSelectBluetoothDevice(makeEvent(), [
+            { deviceId: 'anon', deviceName: 'Unknown or Unsupported Device (anon)' },
+            { deviceId: 'bad', deviceName: 'Volt' },
+            { deviceId: 'x3', deviceName: 'JBL' },
+        ], jest.fn())
+
+        expect(skipEvents()).toEqual([
+            { message: 'skipping device', deviceId: 'anon', reason: 'no-name' },
+            { message: 'skipping device', deviceId: 'bad', reason: 'blacklisted' },
+            { message: 'skipping device', deviceId: 'x3', reason: 'name-blocked' },
+        ])
+    })
+
+    test('logs a device only once per scan, and again after a new scan', () => {
+        const list = [{ deviceId: 'anon', deviceName: '' }]
+        feature._onSelectBluetoothDevice(makeEvent(), list, jest.fn())
+        feature._onSelectBluetoothDevice(makeEvent(), list, jest.fn())
+        expect(skipEvents()).toHaveLength(1)
+
+        feature._triggerScanIteration = jest.fn()
+        feature.startScan([], true)
+        feature._onSelectBluetoothDevice(makeEvent(), list, jest.fn())
+        expect(skipEvents()).toHaveLength(2)
+    })
+
+    test('does not log candidates or devices that were already approved', () => {
+        feature._onSelectBluetoothDevice(makeEvent(), [{ deviceId: 'aa', deviceName: 'Volt' }], jest.fn())   // approved
+        feature._onSelectBluetoothDevice(makeEvent(), [{ deviceId: 'aa', deviceName: 'Volt' }], jest.fn())   // already approved
+        expect(skipEvents()).toHaveLength(0)
+    })
+})
+
 // ── reportConnectSucceeded ───────────────────────────────────────────────────────
 
 describe('WebBleFeature — reportConnectSucceeded', () => {

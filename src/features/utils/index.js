@@ -234,13 +234,40 @@ function ipcRegisterBroadcast( api, ipcEvent,ipcRenderer) {
  * registers one listener and returns a function that removes just that listener.
  */
 function ipcSubscribe( ipcEvent, ipcRenderer) {
-    return (callback) => {
-        if (typeof callback !== 'function')
-            return () => {}
+    try {
+        return (callback) => {
+            try {
+                if (typeof callback !== 'function')
+                    return () => {}
 
-        const onEvent = (_ipcEventInfo, ...args) => callback(...args)
-        ipcRenderer.on( ipcEvent, onEvent)
-        return () => { ipcRenderer.removeListener( ipcEvent, onEvent) }
+                // a throwing listener must not propagate into the renderer's IPC dispatch
+                const onEvent = (_ipcEventInfo, ...args) => {
+                    try {
+                        callback(...args)
+                    }
+                    catch (err) {
+                        console.log( `ERROR in IPC listener ${ipcEvent}: ${err?.message}`)
+                    }
+                }
+                ipcRenderer.on( ipcEvent, onEvent)
+                return () => {
+                    try {
+                        ipcRenderer.removeListener( ipcEvent, onEvent)
+                    }
+                    catch (err) {
+                        console.log( `ERROR in IPC unsubscribe ${ipcEvent}: ${err?.message}`)
+                    }
+                }
+            }
+            catch (err) {
+                console.log( `ERROR in IPC subscribe ${ipcEvent}: ${err?.message}`)
+                return () => {}
+            }
+        }
+    }
+    catch (err) {
+        console.log( `ERROR in IPC subscribe ${ipcEvent}: ${err?.message}`)
+        return () => () => {}
     }
 }
 

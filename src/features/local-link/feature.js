@@ -43,6 +43,7 @@ class LocalLinkFeature extends Feature {
 
         // shared by every listener of the transport
         this.peerFilter = new PeerFilter({
+            logger: this.logger,
             onRefused: (listener, addressClass, count) =>
                 this.emitEvent({ type: 'peer-refused', listener, addressClass, count })
         })
@@ -77,154 +78,246 @@ class LocalLinkFeature extends Feature {
         return LocalLinkFeature._instance
     }
 
+    /** Logs a swallowed error (function name and message only: never addresses, tokens, secrets or payloads). */
+    logError(fn, err) {
+        try {
+            this.logger.logEvent({ message: 'local-link error', fn, error: err?.message })
+        }
+        catch { /* the logger itself failed: nothing left to do */ }
+    }
+
     emitEvent(event) {
-        ipcSendEvent(EVENT_CHANNEL, event)
+        try {
+            ipcSendEvent(EVENT_CHANNEL, event)
+        }
+        catch (err) {
+            this.logError('emitEvent', err)
+        }
     }
 
     // --- implementation methods (tested directly in unit tests) ---
 
     async getCapabilities() {
-        return { transportVersion: TRANSPORT_VERSION, capabilities: [...CAPABILITIES] }
+        try {
+            return { transportVersion: TRANSPORT_VERSION, capabilities: [...CAPABILITIES] }
+        }
+        catch (err) {
+            this.logError('getCapabilities', err)
+            return { transportVersion: 0, capabilities: [] }
+        }
     }
 
     async getStatus() {
-        const { handleCount, tokenCount } = this.media.getStats()
-        return {
-            running: { control: this.control.isRunning(), media: this.media.isRunning() },
-            ports: { control: this.control.getPort(), media: this.media.getPort() },
-            addresses: this.listAddresses(),
-            announced: this.announcement ? { instanceName: this.announcement.instanceName } : null,
-            connections: this.control.getConnectionCount(),
-            handleCount,
-            tokenCount,
+        try {
+            const { handleCount, tokenCount } = this.media.getStats()
+            return {
+                running: { control: this.control.isRunning(), media: this.media.isRunning() },
+                ports: { control: this.control.getPort(), media: this.media.getPort() },
+                addresses: this.listAddresses(),
+                announced: this.announcement ? { instanceName: this.announcement.instanceName } : null,
+                connections: this.control.getConnectionCount(),
+                handleCount,
+                tokenCount,
+            }
+        }
+        catch (err) {
+            this.logError('getStatus', err)
+            return { running: { control: false, media: false }, ports: {}, addresses: [], announced: null, connections: 0, handleCount: 0, tokenCount: 0 }
         }
     }
 
     async start(opts = {}) {
-        const result = { addresses: this.listAddresses() }
+        try {
+            const result = { addresses: this.listAddresses() }
 
-        // each listener reports its own outcome, so one EADDRINUSE does not hide the other
-        if (opts?.control)
-            result.control = await this.control.start(opts.control)
-        if (opts?.media)
-            result.media = await this.media.start(opts.media)
+            // each listener reports its own outcome, so one EADDRINUSE does not hide the other
+            if (opts?.control)
+                result.control = await this.control.start(opts.control)
+            if (opts?.media)
+                result.media = await this.media.start(opts.media)
 
-        if (result.control?.ok || result.media?.ok) {
-            this.watchRenderer()
-            this.startWatcher()
+            if (result.control?.ok || result.media?.ok) {
+                this.watchRenderer()
+                this.startWatcher()
+            }
+            return result
         }
-        return result
+        catch (err) {
+            this.logError('start', err)
+            const failed = { addresses: [] }
+            if (opts?.control) failed.control = { ok: false, error: { code: 'UNKNOWN' } }
+            if (opts?.media) failed.media = { ok: false, error: { code: 'UNKNOWN' } }
+            return failed
+        }
     }
 
     async stop(opts) {
-        const listener = opts?.listener
-        if (!listener || listener === 'control') {
-            // the announcement points at the control port, so it goes with the listener
-            await this.withdraw()
-            await this.control.stop()
-        }
-        if (!listener || listener === 'media')
-            await this.media.stop()
+        try {
+            const listener = opts?.listener
+            if (!listener || listener === 'control') {
+                // the announcement points at the control port, so it goes with the listener
+                await this.withdraw()
+                await this.control.stop()
+            }
+            if (!listener || listener === 'media')
+                await this.media.stop()
 
-        if (!this.control.isRunning() && !this.media.isRunning())
-            this.stopWatcher()
-        return { ok: true }
+            if (!this.control.isRunning() && !this.media.isRunning())
+                this.stopWatcher()
+            return { ok: true }
+        }
+        catch (err) {
+            this.logError('stop', err)
+            return { ok: false }
+        }
     }
 
     async setPeerPolicy(policy) {
-        return this.peerFilter.setPolicy(policy)
+        try {
+            return this.peerFilter.setPolicy(policy)
+        }
+        catch (err) {
+            this.logError('setPeerPolicy', err)
+            return { ok: false, error: 'internal error' }
+        }
     }
 
     async setLimits(limits) {
-        const applied = {}
-        if (limits?.control && typeof limits.control === 'object')
-            applied.control = this.control.setLimits(limits.control)
-        if (limits?.media && typeof limits.media === 'object')
-            applied.media = this.media.setLimits(limits.media)
-        return { ok: true, applied }
+        try {
+            const applied = {}
+            if (limits?.control && typeof limits.control === 'object')
+                applied.control = this.control.setLimits(limits.control)
+            if (limits?.media && typeof limits.media === 'object')
+                applied.media = this.media.setLimits(limits.media)
+            return { ok: true, applied }
+        }
+        catch (err) {
+            this.logError('setLimits', err)
+            return { ok: false, applied: {} }
+        }
     }
 
     async publishMedia(state) {
-        return this.media.publish(state)
+        try {
+            return this.media.publish(state)
+        }
+        catch (err) {
+            this.logError('publishMedia', err)
+            return { ok: false, rejectedHandles: [], rejectedTokens: 0 }
+        }
     }
 
     async send(connectionId, payload) {
-        return { ok: this.control.send(connectionId, payload) }
+        try {
+            return { ok: this.control.send(connectionId, payload) }
+        }
+        catch (err) {
+            this.logError('send', err)
+            return { ok: false }
+        }
     }
 
     async close(connectionId, reason) {
-        this.control.close(connectionId, reason)
+        try {
+            this.control.close(connectionId, reason)
+        }
+        catch (err) {
+            this.logError('close', err)
+        }
     }
 
     // --- mDNS ---
 
     /** Validates only; the instance name and host label are composed by the renderer. */
     validateAnnouncement(a) {
-        if (typeof a?.instanceName !== 'string' || a.instanceName === ''
-            || Buffer.byteLength(a.instanceName, 'utf8') > MAX_INSTANCE_NAME_BYTES
-            || !INSTANCE_NAME.test(a.instanceName))
-            return 'invalid instanceName'
-        if (typeof a.hostLabel !== 'string' || !HOST_LABEL.test(a.hostLabel))
-            return 'invalid hostLabel'
+        try {
+            if (typeof a?.instanceName !== 'string' || a.instanceName === ''
+                || Buffer.byteLength(a.instanceName, 'utf8') > MAX_INSTANCE_NAME_BYTES
+                || !INSTANCE_NAME.test(a.instanceName))
+                return 'invalid instanceName'
+            if (typeof a.hostLabel !== 'string' || !HOST_LABEL.test(a.hostLabel))
+                return 'invalid hostLabel'
 
-        const port = a.port ?? this.control.getPort()
-        if (port === undefined)
-            return 'control listener not running'
-        if (!Number.isInteger(port) || port < 1 || port > 65535)
-            return 'invalid port'
-        return undefined
+            const port = a.port ?? this.control.getPort()
+            if (port === undefined)
+                return 'control listener not running'
+            if (!Number.isInteger(port) || port < 1 || port > 65535)
+                return 'invalid port'
+            return undefined
+        }
+        catch (err) {
+            this.logError('validateAnnouncement', err)
+            return 'invalid announcement'
+        }
     }
 
     async announce(a) {
-        if (a === null || a === undefined) {
+        try {
+            if (a === null || a === undefined) {
+                this.withdraw()
+                return { ok: true }
+            }
+
+            const error = this.validateAnnouncement(a)
+            if (error)
+                return { ok: false, error }
+
             this.withdraw()
-            return { ok: true }
+            this.announcement = {
+                instanceName: a.instanceName, hostLabel: a.hostLabel, port: a.port ?? this.control.getPort()
+            }
+            return this.publish()
         }
-
-        const error = this.validateAnnouncement(a)
-        if (error)
-            return { ok: false, error }
-
-        this.withdraw()
-        this.announcement = {
-            instanceName: a.instanceName, hostLabel: a.hostLabel, port: a.port ?? this.control.getPort()
+        catch (err) {
+            this.logError('announce', err)
+            return { ok: false, error: 'announce failed' }
         }
-        return this.publish()
     }
 
     publish() {
-        const { instanceName, hostLabel, port } = this.announcement
         try {
-            // a dedicated instance: direct-connect's browse instance has its own lifecycle
-            this.bonjour = new Bonjour()
-            const service = this.bonjour.publish({
-                name: instanceName, type: SERVICE_TYPE, protocol: SERVICE_PROTOCOL, port,
-                // never derived from the OS hostname
-                host: `${hostLabel}.local`,
-            })
-            this.service = service
-            service?.on?.('up', () => {
-                if (this.service === service)
-                    this.emitEvent({ type: 'announced', instanceName })
-            })
-            service?.on?.('error', (err) => this.onAnnounceError(err, service))
-            this.logger.logEvent({ message: 'local-link announce published', port })
-            return { ok: true }
+            const { instanceName, hostLabel, port } = this.announcement
+            try {
+                // a dedicated instance: direct-connect's browse instance has its own lifecycle
+                this.bonjour = new Bonjour()
+                const service = this.bonjour.publish({
+                    name: instanceName, type: SERVICE_TYPE, protocol: SERVICE_PROTOCOL, port,
+                    // never derived from the OS hostname
+                    host: `${hostLabel}.local`,
+                })
+                this.service = service
+                service?.on?.('up', () => {
+                    if (this.service === service)
+                        this.emitEvent({ type: 'announced', instanceName })
+                })
+                service?.on?.('error', (err) => this.onAnnounceError(err, service))
+                this.logger.logEvent({ message: 'local-link announce published', port })
+                return { ok: true }
+            }
+            catch (err) {
+                this.onAnnounceError(err)
+                this.destroyBonjour()
+                this.announcement = undefined
+                return { ok: false, error: err?.code ?? 'announce failed' }
+            }
         }
         catch (err) {
-            this.onAnnounceError(err)
-            this.destroyBonjour()
-            this.announcement = undefined
-            return { ok: false, error: err?.code ?? 'announce failed' }
+            this.logError('publish', err)
+            return { ok: false, error: 'announce failed' }
         }
     }
 
     onAnnounceError(err, service) {
-        if (service && this.service !== service)
-            return
-        const code = err?.code ?? 'UNKNOWN'
-        this.logger.logEvent({ message: 'local-link announce failed', code })
-        this.emitEvent({ type: 'announce-error', code })
+        try {
+            if (service && this.service !== service)
+                return
+            const code = err?.code ?? 'UNKNOWN'
+            this.logger.logEvent({ message: 'local-link announce failed', code })
+            this.emitEvent({ type: 'announce-error', code })
+        }
+        catch (err) {
+            this.logError('onAnnounceError', err)
+        }
     }
 
     /**
@@ -234,100 +327,133 @@ class LocalLinkFeature extends Feature {
      * is out, or after a short timeout.
      */
     destroyBonjour() {
-        const bonjour = this.bonjour
-        this.bonjour = undefined
-        this.service = undefined
-        if (!bonjour)
-            return Promise.resolve()
+        try {
+            const bonjour = this.bonjour
+            this.bonjour = undefined
+            this.service = undefined
+            if (!bonjour)
+                return Promise.resolve()
 
-        return new Promise(resolve => {
-            let done = false
-            let timer
-            const finish = () => {
-                if (done)
-                    return
-                done = true
-                clearTimeout(timer)
-                try { bonjour.destroy() } catch (err) {
-                    this.logger.logEvent({ message: 'local-link bonjour destroy failed', error: err?.message })
+            return new Promise(resolve => {
+                let done = false
+                let timer
+                const finish = () => {
+                    if (done)
+                        return
+                    done = true
+                    clearTimeout(timer)
+                    try { bonjour.destroy() } catch (err) {
+                        this.logger.logEvent({ message: 'local-link bonjour destroy failed', error: err?.message })
+                    }
+                    resolve()
                 }
-                resolve()
-            }
-            timer = setTimeout(finish, GOODBYE_TIMEOUT_MS)
-            timer.unref?.()
-            try {
-                if (typeof bonjour.unpublishAll === 'function')
-                    bonjour.unpublishAll(finish)
-                else
-                    finish()
-            }
-            catch { finish() }
-        })
+                timer = setTimeout(finish, GOODBYE_TIMEOUT_MS)
+                timer.unref?.()
+                try {
+                    if (typeof bonjour.unpublishAll === 'function')
+                        bonjour.unpublishAll(finish)
+                    else
+                        finish()
+                }
+                catch { finish() }
+            })
+        }
+        catch (err) {
+            this.logError('destroyBonjour', err)
+            return Promise.resolve()
+        }
     }
 
     /** Withdraws the announcement and sends the mDNS goodbye. The returned promise resolves once it is out. */
     withdraw() {
-        const had = this.announcement !== undefined
-        this.announcement = undefined
-        const gone = this.destroyBonjour()
-        if (had)
-            this.logger.logEvent({ message: 'local-link announce withdrawn' })
-        return gone
+        try {
+            const had = this.announcement !== undefined
+            this.announcement = undefined
+            const gone = this.destroyBonjour()
+            if (had)
+                this.logger.logEvent({ message: 'local-link announce withdrawn' })
+            return gone
+        }
+        catch (err) {
+            this.logError('withdraw', err)
+            return Promise.resolve()
+        }
     }
 
     /** Destroys and recreates the Bonjour instance, then publishes on the current interfaces. */
     async reannounce() {
-        if (!this.announcement)
+        try {
+            if (!this.announcement)
+                return { ok: false }
+            this.destroyBonjour()
+            return this.publish()
+        }
+        catch (err) {
+            this.logError('reannounce', err)
             return { ok: false }
-        this.destroyBonjour()
-        return this.publish()
+        }
     }
 
     // --- network watcher ---
 
     startWatcher() {
-        if (this.watcher)
-            return
-
-        this.knownAddresses = this.listAddresses()
-        this.watcher = { timer: setInterval(() => this.checkNetwork(), NETWORK_POLL_MS) }
-        this.watcher.timer.unref?.()
-
         try {
-            const powerMonitor = require('electron').powerMonitor
-            if (powerMonitor?.on) {
-                const onResume = () => this.emitEvent({ type: 'resumed' })
-                powerMonitor.on('resume', onResume)
-                powerMonitor.on('unlock-screen', onResume)
-                this.watcher.power = { powerMonitor, onResume }
+            if (this.watcher)
+                return
+
+            this.knownAddresses = this.listAddresses()
+            this.watcher = { timer: setInterval(() => this.checkNetwork(), NETWORK_POLL_MS) }
+            this.watcher.timer.unref?.()
+
+            try {
+                const powerMonitor = require('electron').powerMonitor
+                if (powerMonitor?.on) {
+                    const onResume = () => this.emitEvent({ type: 'resumed' })
+                    powerMonitor.on('resume', onResume)
+                    powerMonitor.on('unlock-screen', onResume)
+                    this.watcher.power = { powerMonitor, onResume }
+                }
+            }
+            catch (err) {
+                this.logger.logEvent({ message: 'local-link power monitor unavailable', error: err?.message })
             }
         }
         catch (err) {
-            this.logger.logEvent({ message: 'local-link power monitor unavailable', error: err?.message })
+            this.logError('startWatcher', err)
         }
     }
 
     stopWatcher() {
-        const watcher = this.watcher
-        if (!watcher)
-            return
-        this.watcher = undefined
-        this.knownAddresses = undefined
+        try {
+            const watcher = this.watcher
+            if (!watcher)
+                return
+            this.watcher = undefined
+            this.knownAddresses = undefined
 
-        clearInterval(watcher.timer)
-        const { powerMonitor, onResume } = watcher.power ?? {}
-        powerMonitor?.removeListener?.('resume', onResume)
-        powerMonitor?.removeListener?.('unlock-screen', onResume)
+            clearInterval(watcher.timer)
+            const { powerMonitor, onResume } = watcher.power ?? {}
+            powerMonitor?.removeListener?.('resume', onResume)
+            powerMonitor?.removeListener?.('unlock-screen', onResume)
+        }
+        catch (err) {
+            this.logError('stopWatcher', err)
+        }
     }
 
     /** Emits network-changed if the set of non-internal interface addresses differs from the last poll. */
     checkNetwork() {
-        const addresses = this.listAddresses()
-        const keys = (list) => list.filter(a => !a.internal).map(addressKey).sort().join(',')
-        const changed = this.knownAddresses === undefined || keys(addresses) !== keys(this.knownAddresses)
-        this.knownAddresses = addresses
-        if (changed)
-            this.emitEvent({ type: 'network-changed', addresses })
+        try {
+            const addresses = this.listAddresses()
+            const keys = (list) => list.filter(a => !a.internal).map(addressKey).sort().join(',')
+            const changed = this.knownAddresses === undefined || keys(addresses) !== keys(this.knownAddresses)
+            this.knownAddresses = addresses
+            if (changed)
+                this.emitEvent({ type: 'network-changed', addresses })
+        }
+        catch (err) {
+            this.logError('checkNetwork', err)
+        }
     }
 
     // --- renderer lifetime ---
@@ -337,74 +463,99 @@ class LocalLinkFeature extends Feature {
      * state and the announcement stay. The webContents is watched only once.
      */
     watchRenderer() {
-        let contents
-        let win
         try {
-            win = app.incyclistApp?.getMainWindow?.()?.win
-            contents = win?.webContents
-        }
-        catch { return }
-        if (!contents?.on || this.watchedContents.has(contents))
-            return
-        this.watchedContents.add(contents)
+            let contents
+            let win
+            try {
+                win = app.incyclistApp?.getMainWindow?.()?.win
+                contents = win?.webContents
+            }
+            catch { return }
+            if (!contents?.on || this.watchedContents.has(contents))
+                return
+            this.watchedContents.add(contents)
 
-        contents.on('render-process-gone', () => this.onRendererGone())
-        contents.on('destroyed', () => this.onRendererGone())
-        win?.once?.('closed', () => this.onRendererGone())
+            contents.on('render-process-gone', () => this.onRendererGone())
+            contents.on('destroyed', () => this.onRendererGone())
+            win?.once?.('closed', () => this.onRendererGone())
+        }
+        catch (err) {
+            this.logError('watchRenderer', err)
+        }
     }
 
     onRendererGone() {
-        this.control.closeAll('renderer-gone')
+        try {
+            this.control.closeAll('renderer-gone')
+        }
+        catch (err) {
+            this.logError('onRendererGone', err)
+        }
     }
 
     /** Quit hook: plain close/destroy only, so it cannot trigger the native-transport shutdown crash. */
     async shutdown() {
-        this.stopWatcher()
-        const goodbye = this.withdraw()
-        this.control.closeAll('quit')
-        await this.control.stop()
-        await this.media.stop()
-        this.peerFilter.dispose()
-        await goodbye
+        try {
+            this.stopWatcher()
+            const goodbye = this.withdraw()
+            this.control.closeAll('quit')
+            await this.control.stop()
+            await this.media.stop()
+            this.peerFilter.dispose()
+            await goodbye
+        }
+        catch (err) {
+            this.logError('shutdown', err)
+        }
     }
 
     // --- IPC wiring ---
 
     register(_props) {
-        ipcHandle('local-link-get-capabilities', this.getCapabilities.bind(this), ipcMain)
-        ipcHandle('local-link-get-status', this.getStatus.bind(this), ipcMain)
-        ipcHandle('local-link-start', this.start.bind(this), ipcMain)
-        ipcHandle('local-link-stop', this.stop.bind(this), ipcMain)
-        ipcHandle('local-link-set-peer-policy', this.setPeerPolicy.bind(this), ipcMain)
-        ipcHandle('local-link-publish-media', this.publishMedia.bind(this), ipcMain)
-        ipcHandle('local-link-set-limits', this.setLimits.bind(this), ipcMain)
-        ipcHandle('local-link-announce', this.announce.bind(this), ipcMain)
-        ipcHandle('local-link-reannounce', this.reannounce.bind(this), ipcMain)
-        ipcHandle('local-link-send', this.send.bind(this), ipcMain)
-        ipcHandle('local-link-close', this.close.bind(this), ipcMain)
+        try {
+            ipcHandle('local-link-get-capabilities', this.getCapabilities.bind(this), ipcMain)
+            ipcHandle('local-link-get-status', this.getStatus.bind(this), ipcMain)
+            ipcHandle('local-link-start', this.start.bind(this), ipcMain)
+            ipcHandle('local-link-stop', this.stop.bind(this), ipcMain)
+            ipcHandle('local-link-set-peer-policy', this.setPeerPolicy.bind(this), ipcMain)
+            ipcHandle('local-link-publish-media', this.publishMedia.bind(this), ipcMain)
+            ipcHandle('local-link-set-limits', this.setLimits.bind(this), ipcMain)
+            ipcHandle('local-link-announce', this.announce.bind(this), ipcMain)
+            ipcHandle('local-link-reannounce', this.reannounce.bind(this), ipcMain)
+            ipcHandle('local-link-send', this.send.bind(this), ipcMain)
+            ipcHandle('local-link-close', this.close.bind(this), ipcMain)
 
-        app.incyclistApp?.registerQuitHook(() => this.shutdown())
+            app.incyclistApp?.registerQuitHook(() => this.shutdown())
+        }
+        catch (err) {
+            this.logError('register', err)
+        }
     }
 
     registerRenderer(spec, ipcRenderer) {
-        spec.localLink = { transportVersion: TRANSPORT_VERSION }
+        try {
+            spec.localLink = { transportVersion: TRANSPORT_VERSION }
 
-        spec.localLink.getCapabilities = ipcCall('local-link-get-capabilities', ipcRenderer)
-        spec.localLink.getStatus = ipcCall('local-link-get-status', ipcRenderer)
-        spec.localLink.start = ipcCall('local-link-start', ipcRenderer)
-        spec.localLink.stop = ipcCall('local-link-stop', ipcRenderer)
-        spec.localLink.setPeerPolicy = ipcCall('local-link-set-peer-policy', ipcRenderer)
-        spec.localLink.publishMedia = ipcCall('local-link-publish-media', ipcRenderer)
-        spec.localLink.setLimits = ipcCall('local-link-set-limits', ipcRenderer)
-        spec.localLink.announce = ipcCall('local-link-announce', ipcRenderer)
-        spec.localLink.reannounce = ipcCall('local-link-reannounce', ipcRenderer)
-        spec.localLink.send = ipcCall('local-link-send', ipcRenderer)
-        spec.localLink.close = ipcCall('local-link-close', ipcRenderer)
+            spec.localLink.getCapabilities = ipcCall('local-link-get-capabilities', ipcRenderer)
+            spec.localLink.getStatus = ipcCall('local-link-get-status', ipcRenderer)
+            spec.localLink.start = ipcCall('local-link-start', ipcRenderer)
+            spec.localLink.stop = ipcCall('local-link-stop', ipcRenderer)
+            spec.localLink.setPeerPolicy = ipcCall('local-link-set-peer-policy', ipcRenderer)
+            spec.localLink.publishMedia = ipcCall('local-link-publish-media', ipcRenderer)
+            spec.localLink.setLimits = ipcCall('local-link-set-limits', ipcRenderer)
+            spec.localLink.announce = ipcCall('local-link-announce', ipcRenderer)
+            spec.localLink.reannounce = ipcCall('local-link-reannounce', ipcRenderer)
+            spec.localLink.send = ipcCall('local-link-send', ipcRenderer)
+            spec.localLink.close = ipcCall('local-link-close', ipcRenderer)
 
-        // returns a function that removes only this listener
-        spec.localLink.onEvent = ipcSubscribe(EVENT_CHANNEL, ipcRenderer)
+            // returns a function that removes only this listener
+            spec.localLink.onEvent = ipcSubscribe(EVENT_CHANNEL, ipcRenderer)
 
-        spec.registerFeatures(['local-link'])
+            spec.registerFeatures(['local-link'])
+        }
+        catch (err) {
+            this.logError('registerRenderer', err)
+        }
     }
 }
 

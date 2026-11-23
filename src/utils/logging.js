@@ -6,23 +6,34 @@ EventLogger.setKeyBlackList(LOG_BLACKLIST);
 // they are high-volume and describe individual LAN peers.
 const LOCAL_ONLY_CONTEXTS = ['LocalLinkRequests'];
 
+// A filter runs inside the logger: it must never throw and cannot log through it (recursion), so a failure drops the event.
 function restLogFilter(context, event) {
+    try {
+        if (LOCAL_ONLY_CONTEXTS.includes(context))
+            return false;
 
-    if (LOCAL_ONLY_CONTEXTS.includes(context))
+        let fl = fileLogFilter(context, event);
+        return fl;
+    }
+    catch (err) {
+        console.error('ERROR in restLogFilter: ' + err?.message);
         return false;
-
-    let fl = fileLogFilter(context, event);
-    return fl;
+    }
 }
 exports.restLogFilter = restLogFilter;
 function fileLogFilter(context, event) {
+    try {
+        if (event === undefined || context === undefined)
+            return false;
 
-    if (event === undefined || context === undefined)
+        if (context === 'Requests' || context === 'RestLogAdapter')
+            return false;
+
+        return true;
+    }
+    catch (err) {
+        console.error('ERROR in fileLogFilter: ' + err?.message);
         return false;
-
-    if (context === 'Requests' || context === 'RestLogAdapter')
-        return false;
-
-    return true;
+    }
 }
 exports.fileLogFilter = fileLogFilter;

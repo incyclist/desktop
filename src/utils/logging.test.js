@@ -16,3 +16,14 @@ describe('log filters', () => {
         expect(fileLogFilter('LocalLink', undefined)).toBe(false)
     })
 })
+
+describe('log filters never throw', () => {
+    afterEach(() => { jest.restoreAllMocks() })
+
+    test('restLogFilter drops the event and reports to the console if the lookup throws', () => {
+        const err = jest.spyOn(console, 'error').mockImplementation(() => {})
+        jest.spyOn(Array.prototype, 'includes').mockImplementation(() => { throw new Error('boom') })
+        expect(restLogFilter('LocalLink', { message: 'x' })).toBe(false)
+        expect(err).toHaveBeenCalledWith(expect.stringContaining('boom'))
+    })
+})

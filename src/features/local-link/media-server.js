@@ -20,6 +20,7 @@ const RANGE_SPEC = /^(\d{0,15})-(\d{0,15})$/
 const MAX_PATH_LENGTH = 300
 const MAX_TOKEN_LENGTH = 1024
 const MAX_RANGES = 16
+const OVER_CAP_LOG_DELAY_MS = 10000
 
 // Defaults and hard ceilings for the limits values supplied by the renderer
 const LIMITS = {
@@ -296,6 +297,28 @@ class MediaServer {
         this.active = new Set()
     }
 
+    /** Counts a connection refused because the peer is at its cap; reported once per burst as a count (never the address). */
+    countOverCap() {
+        try {
+            this.overCapCount = (this.overCapCount ?? 0) + 1
+            if (this.overCapTimer)
+                return
+            this.overCapTimer = setTimeout(() => {
+                try {
+                    const count = this.overCapCount
+                    this.overCapCount = 0
+                    this.overCapTimer = undefined
+                    this.logger.logEvent({ message: 'local-link media connections over per-peer cap', count, maxPerPeer: this.limits.maxPerPeer })
+                }
+                catch { /* logging must not break the listener */ }
+            }, OVER_CAP_LOG_DELAY_MS)
+            this.overCapTimer.unref?.()
+        }
+        catch (err) {
+            this.logError('countOverCap', err)
+        }
+    }
+
     /** Logs a swallowed error (function name and message only: never addresses, tokens, paths or payloads). */
     logError(fn, err) {
         try {
@@ -524,6 +547,7 @@ class MediaServer {
             const key = peerKey(socket.remoteAddress)
             const count = this.peerCounts.get(key) ?? 0
             if (count >= this.limits.maxPerPeer) {
+                this.countOverCap()
                 socket.destroy()
                 return
             }

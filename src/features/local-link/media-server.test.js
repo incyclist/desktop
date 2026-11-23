@@ -154,6 +154,29 @@ describe('MediaServer', () => {
             }
         })
 
+        test('connections over the per-peer cap are counted in one log event, without the peer address', async () => {
+            jest.useFakeTimers()
+            try {
+                const logs = []
+                const mk = () => ({ remoteAddress: '192.168.1.77', destroy: jest.fn(), once: jest.fn(), on: jest.fn(), setTimeout: jest.fn() })
+                const srv = new MediaServer({ emit: () => { /* unused */ }, peerFilter: new PeerFilter(), logger: { logEvent: e => logs.push(e) } })
+                srv.setLimits({ maxPerPeer: 1 })
+                for (let i = 0; i < 6; i++)
+                    srv.onConnection(mk())
+                expect(logs).toEqual([])
+                jest.advanceTimersByTime(10000)
+                const ev = logs.filter(l => l.message === 'local-link media connections over per-peer cap')
+                expect(ev).toHaveLength(1)
+                expect(ev[0]).toMatchObject({ count: 5, maxPerPeer: 1 })
+                expect(JSON.stringify(logs)).not.toContain('192.168')
+                jest.advanceTimersByTime(20000)
+                expect(logs).toHaveLength(1)
+            }
+            finally {
+                jest.useRealTimers()
+            }
+        })
+
         test('per-peer count keys on the /64 for IPv6 peers', () => {
             const mk = (address) => ({ remoteAddress: address, destroy: jest.fn(), once: jest.fn(), on: jest.fn(), setTimeout: jest.fn() })
             const srv = new MediaServer({ emit: () => { /* unused */ }, peerFilter: new PeerFilter() })

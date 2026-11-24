@@ -5,7 +5,8 @@ module.exports = {
       electron: "<rootDir>/test/mock/electron.js"
     },
     roots: [
-      "<rootDir>/src"
+      "<rootDir>/src",
+      "<rootDir>/scripts"
     ],
     collectCoverageFrom: [
       "src/**/*.{js,jsx,ts,tsx}",

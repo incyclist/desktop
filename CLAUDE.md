@@ -228,6 +228,17 @@ spec.registerFeatures(['myfeature', 'myfeature-v2'])
 - Do not write tests that cover IPC routing (`ipcHandle`/`ipcCall` wiring) — that layer is assumed correct
 - Integration tests (`npm run test:integration`) and Playwright e2e tests (`npm run app-test`) are not part of the regular development workflow
 
+## WebBLE device blacklist and known device names
+
+WebBLE (Linux) probes every named device in the chooser. Devices that connect but offer no fitness service
+("unsupported") or that never answer are blacklisted for good in `webble-devices.json` (app directory); devices that
+advertise under rotating addresses (speakers, TVs) are blacklisted by name. A hand-maintained list of name parts of
+real trainers and sensors protects them from being blacklisted just because they did not respond (they are still
+blacklisted when they report "unsupported"). The list is owned by `incyclist-services`; the UI hands it to the main
+process at startup (capability `webble-known-names`), and a higher version cleans the blocks it matches. The desktop
+has no copy of it. See `scripts/known-device-names/README.md`. When touching the blacklist or the chooser logic, keep
+that guarantee.
+
 ## Electron Security Configuration
 
 `src/web/pages/main.js` sets `nodeIntegration: true` and `contextIsolation: false`. This is a legacy configuration. Do not change it proactively — a dedicated security binding replacement task will address it.

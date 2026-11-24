@@ -1,3 +1,10 @@
+// the whitelist is tested in known-device-names.test.js: here a name starting with "known" counts as known
+jest.mock('./known-device-names', () => ({
+    isKnownDeviceName: jest.fn(name => /^known/i.test(name ?? '')),
+    setKnownDeviceNames: jest.fn(list => !!list && list.version >= 1),
+    getKnownNamesVersion: jest.fn(() => 0),
+}))
+
 jest.mock('electron', () => ({
     app: {
         on: jest.fn(),
@@ -24,6 +31,7 @@ jest.mock('./device-cache', () => ({
         isGood: jest.fn().mockReturnValue(false),
         isBad: jest.fn().mockReturnValue(false),
         isNameBad: jest.fn().mockReturnValue(false),
+        applyKnownNames: jest.fn().mockReturnValue(true),
         markGood: jest.fn(),
         markBad: jest.fn(),
         recordFailure: jest.fn(),
@@ -381,6 +389,17 @@ describe('WebBleFeature — cooldown by device name', () => {
         expect(feature._nameBlockReason('Volt', 'other')).toBeUndefined()
     })
 
+    test('a known trainer name is never blocked, however often devices with that name fail', () => {
+        feature.reportProbeFailed('aa', 'KnownTrainer 1111')
+        feature.reportProbeFailed('bb', 'KnownTrainer 2222')
+        feature.reportUnsupportedDevice('cc', 'KnownTrainer 3333')
+        feature.deviceCache.isNameBad.mockReturnValue(true)
+
+        expect(feature._nameBlockReason('KnownTrainer 4444', 'dd')).toBeUndefined()
+        expect(approve(named('KnownTrainer 4444', 'dd'))).toHaveBeenCalledWith('dd')
+        expect(feature.logger.logEvent).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'name cooldown' }))
+    })
+
     test('the name cooldown is logged once, when it starts', () => {
         feature.reportProbeFailed('aa', 'JBL PartyBox')
         feature.reportProbeFailed('bb', 'JBL PartyBox')
@@ -440,6 +459,50 @@ describe('WebBleFeature — skipping device log', () => {
         feature._onSelectBluetoothDevice(makeEvent(), [{ deviceId: 'aa', deviceName: 'Volt' }], jest.fn())   // approved
         feature._onSelectBluetoothDevice(makeEvent(), [{ deviceId: 'aa', deviceName: 'Volt' }], jest.fn())   // already approved
         expect(skipEvents()).toHaveLength(0)
+    })
+})
+
+// ── setKnownDeviceNames ──────────────────────────────────────────────────────────
+
+describe('WebBleFeature — setKnownDeviceNames', () => {
+
+    const known = require('./known-device-names')
+    let feature
+
+    beforeEach(() => {
+        feature = new WebBleFeature()
+        feature.logger.logEvent = jest.fn()
+    })
+
+    test('takes the list over and has the block list cleaned against it', () => {
+        const list = { version: 3, names: ['kickr', 'hrm*'] }
+
+        feature.setKnownDeviceNames(list)
+
+        expect(known.setKnownDeviceNames).toHaveBeenCalledWith(list)
+        expect(feature.deviceCache.applyKnownNames).toHaveBeenCalledTimes(1)
+        expect(feature.logger.logEvent).toHaveBeenCalledWith(expect.objectContaining({ message: 'known device names set', version: 3, count: 2, cleaned: true }))
+    })
+
+    test('a list that is refused is logged and cleans nothing', () => {
+        feature.setKnownDeviceNames({ version: 0, names: [] })
+
+        expect(feature.deviceCache.applyKnownNames).not.toHaveBeenCalled()
+        expect(feature.logger.logEvent).toHaveBeenCalledWith(expect.objectContaining({ message: 'known device names rejected' }))
+    })
+
+    test('nothing breaks without a list', () => {
+        expect(() => feature.setKnownDeviceNames(undefined)).not.toThrow()
+        expect(feature.deviceCache.applyKnownNames).not.toHaveBeenCalled()
+    })
+
+    test('is wired to IPC (webble-known-names) and offered to the renderer', () => {
+        feature.register({})
+        expect(ipcHandleNoResponse).toHaveBeenCalledWith('webble-known-names', expect.any(Function), expect.anything())
+
+        const spec = { registerFeatures: jest.fn() }
+        feature.registerRenderer(spec, { send: jest.fn(), on: jest.fn(), removeAllListeners: jest.fn() })
+        expect(typeof spec.webble.setKnownDeviceNames).toBe('function')
     })
 })
 
@@ -1017,7 +1080,7 @@ describe('WebBleFeature — registerRenderer (platform gating)', () => {
             const spec = { registerFeatures: jest.fn() }
             const feature = WebBleFeature.getInstance()
             feature.registerRenderer(spec, { send: jest.fn(), on: jest.fn(), removeAllListeners: jest.fn() })
-            expect(spec.registerFeatures).toHaveBeenCalledWith(['webble', 'webble-services'])
+            expect(spec.registerFeatures).toHaveBeenCalledWith(['webble', 'webble-services', 'webble-known-names'])
         })
     })
 
@@ -1094,7 +1157,7 @@ describe('WebBleFeature — registerRenderer', () => {
     test('announces webble capabilities', () => {
         const feature = WebBleFeature.getInstance()
         feature.registerRenderer(spec, ipcRenderer)
-        expect(spec.registerFeatures).toHaveBeenCalledWith(['webble', 'webble-services'])
+        expect(spec.registerFeatures).toHaveBeenCalledWith(['webble', 'webble-services', 'webble-known-names'])
     })
 
     test('startScanning sends webble-start-scan IPC', () => {

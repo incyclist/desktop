@@ -1,3 +1,10 @@
+// the whitelist is tested in known-device-names.test.js: here a name starting with "known" counts as known
+jest.mock('./known-device-names', () => ({
+    isKnownDeviceName: jest.fn(name => /^known/i.test(name ?? '')),
+    setKnownDeviceNames: jest.fn(list => !!list && list.version >= 1),
+    getKnownNamesVersion: jest.fn(() => 0),
+}))
+
 jest.mock('electron', () => ({
     app: {
         on: jest.fn(),
@@ -23,6 +30,8 @@ jest.mock('./device-cache', () => ({
     getInstance: jest.fn(() => ({
         isGood: jest.fn().mockReturnValue(false),
         isBad: jest.fn().mockReturnValue(false),
+        isNameBad: jest.fn().mockReturnValue(false),
+        applyKnownNames: jest.fn().mockReturnValue(true),
         markGood: jest.fn(),
         markBad: jest.fn(),
         recordFailure: jest.fn(),
@@ -247,6 +256,256 @@ describe('WebBleFeature — _inCooldown / reportProbeFailed', () => {
 
 })
 
+// ── cooldown by device name (rotating addresses) ────────────────────────────────
+
+describe('WebBleFeature — cooldown by device name', () => {
+
+    let feature
+    const makeEvent = () => ({ preventDefault: jest.fn() })
+    const named = (name, ...ids) => ids.map(id => ({ deviceId: id, deviceName: name }))
+    const approve = (list) => {
+        feature.scanning = true
+        const cb = jest.fn()
+        feature._onSelectBluetoothDevice(makeEvent(), list, cb)
+        return cb
+    }
+
+    beforeEach(() => {
+        feature = new WebBleFeature()
+        feature.logger.logEvent = jest.fn()
+    })
+
+    test('a single failed device does not block its name: a second device with the same name is still probed', () => {
+        feature.reportProbeFailed('aa', 'Volt')
+
+        expect(approve(named('Volt', 'aa', 'bb'))).toHaveBeenCalledWith('bb')
+        expect(feature._isNameBlocked('Volt', 'bb')).toBe(false)
+    })
+
+    test('the same address failing twice is not "two different addresses"', () => {
+        feature.reportProbeFailed('aa', 'Volt')
+        feature.reportProbeFailed('aa', 'Volt')
+
+        expect(feature._isNameBlocked('Volt', 'bb')).toBe(false)
+    })
+
+    test('failures on two different addresses block further addresses with that name, even as a last resort', () => {
+        feature.reportProbeFailed('aa', 'JBL PartyBox')
+        feature.reportProbeFailed('bb', 'JBL PartyBox')
+
+        const cb = approve(named('JBL PartyBox', 'cc'))
+
+        expect(cb).not.toHaveBeenCalled()
+        expect(feature.pendingCallback).toBe(cb)    // parked, nothing approved
+        expect(feature.logger.logEvent).toHaveBeenCalledWith(expect.objectContaining({ message: 'name cooldown', deviceName: 'JBL PartyBox', macs: 2 }))
+    })
+
+    test('other names are not affected', () => {
+        feature.reportProbeFailed('aa', 'JBL PartyBox')
+        feature.reportProbeFailed('bb', 'JBL PartyBox')
+
+        expect(approve(named('Volt', 'cc'))).toHaveBeenCalledWith('cc')
+    })
+
+    test('a name with a working device is never blocked (two real Volts, one unresponsive)', () => {
+        feature.deviceMacsByName.set('Volt', new Set(['good']))
+        feature.deviceCache.isGood.mockImplementation(mac => mac === 'good')
+        feature.reportProbeFailed('aa', 'Volt')
+        feature.reportProbeFailed('bb', 'Volt')
+
+        expect(feature._isNameBlocked('Volt', 'cc')).toBe(false)
+        expect(approve(named('Volt', 'cc'))).toHaveBeenCalledWith('cc')
+    })
+
+    test('a successful connect clears the failure history of that name', () => {
+        feature.reportProbeFailed('aa', 'Volt')
+        feature.reportConnectSucceeded('bb', 'Volt')
+        feature.reportProbeFailed('cc', 'Volt')
+
+        expect(feature._isNameBlocked('Volt', 'dd')).toBe(false)
+    })
+
+    test('a device we explicitly connect to or know as good is never blocked by name', () => {
+        feature.reportProbeFailed('aa', 'Volt')
+        feature.reportProbeFailed('bb', 'Volt')
+        feature.connectTargetMacs.add('target')
+        feature.deviceCache.isGood.mockImplementation(mac => mac === 'known')
+
+        expect(feature._isNameBlocked('Volt', 'target')).toBe(false)
+        expect(feature._isNameBlocked('Volt', 'known')).toBe(false)
+    })
+
+    test('the block expires once the failures are older than the window', () => {
+        feature.reportProbeFailed('aa', 'JBL PartyBox')
+        feature.reportProbeFailed('bb', 'JBL PartyBox')
+        expect(feature._isNameBlocked('JBL PartyBox', 'cc')).toBe(true)
+
+        for (const failures of feature.nameFailures.values()) {
+            for (const mac of failures.keys()) failures.set(mac, Date.now() - 6 * 60 * 1000)
+        }
+
+        expect(feature._isNameBlocked('JBL PartyBox', 'cc')).toBe(false)
+        expect(feature.nameFailures.size).toBe(0)
+    })
+
+    test('devices without a name are never name-blocked', () => {
+        feature.reportProbeFailed('aa')
+        feature.reportProbeFailed('bb')
+
+        expect(feature._isNameBlocked(undefined, 'cc')).toBe(false)
+    })
+
+    test('a device confirmed unsupported counts as a failure of its name (speaker that connects once, then rotates)', () => {
+        feature.reportUnsupportedDevice('aa', 'JBL PartyBox')
+        expect(feature._isNameBlocked('JBL PartyBox', 'bb')).toBe(false)    // one address is not enough
+
+        feature.reportProbeFailed('bb', 'JBL PartyBox')
+
+        expect(feature._isNameBlocked('JBL PartyBox', 'cc')).toBe(true)
+        expect(approve(named('JBL PartyBox', 'cc'))).not.toHaveBeenCalled()
+    })
+
+    test('an unsupported report for an explicit connect target does not count', () => {
+        feature.connectTargetMacs.add('aa')
+        feature.reportUnsupportedDevice('aa', 'Volt')
+        feature.reportProbeFailed('bb', 'Volt')
+
+        expect(feature._isNameBlocked('Volt', 'cc')).toBe(false)
+    })
+
+    test('a name blacklisted by the persisted history is skipped from the first scan, with its own reason', () => {
+        feature.deviceCache.isNameBad.mockImplementation(name => name === 'JBL PartyBox')
+
+        expect(feature._nameBlockReason('JBL PartyBox', 'zz')).toBe('name-blacklisted')
+        expect(approve(named('JBL PartyBox', 'zz'))).not.toHaveBeenCalled()
+    })
+
+    test('the persisted name verdict never hides a device we use, or a name with a working device', () => {
+        feature.deviceCache.isNameBad.mockReturnValue(true)
+        feature.connectTargetMacs.add('target')
+        feature.deviceMacsByName.set('Volt', new Set(['target']))
+
+        expect(feature._nameBlockReason('JBL', 'target')).toBeUndefined()
+        expect(feature._nameBlockReason('Volt', 'other')).toBeUndefined()
+    })
+
+    test('a known trainer name is never blocked, however often devices with that name fail', () => {
+        feature.reportProbeFailed('aa', 'KnownTrainer 1111')
+        feature.reportProbeFailed('bb', 'KnownTrainer 2222')
+        feature.reportUnsupportedDevice('cc', 'KnownTrainer 3333')
+        feature.deviceCache.isNameBad.mockReturnValue(true)
+
+        expect(feature._nameBlockReason('KnownTrainer 4444', 'dd')).toBeUndefined()
+        expect(approve(named('KnownTrainer 4444', 'dd'))).toHaveBeenCalledWith('dd')
+        expect(feature.logger.logEvent).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'name cooldown' }))
+    })
+
+    test('the name cooldown is logged once, when it starts', () => {
+        feature.reportProbeFailed('aa', 'JBL PartyBox')
+        feature.reportProbeFailed('bb', 'JBL PartyBox')
+        feature.reportProbeFailed('cc', 'JBL PartyBox')
+
+        const events = feature.logger.logEvent.mock.calls.filter(c => c[0].message === 'name cooldown')
+        expect(events).toHaveLength(1)
+    })
+})
+
+// ── skipping device log ─────────────────────────────────────────────────────────
+
+describe('WebBleFeature — skipping device log', () => {
+
+    let feature
+    const makeEvent = () => ({ preventDefault: jest.fn() })
+    const skipEvents = () => feature.logger.logEvent.mock.calls.map(c => c[0]).filter(e => e.message === 'skipping device')
+
+    beforeEach(() => {
+        feature = new WebBleFeature()
+        feature.logger.logEvent = jest.fn()
+        feature.scanning = true
+    })
+
+    test('logs why a device is not a candidate: placeholder name, blacklisted, blocked name', () => {
+        feature.deviceCache.isBad.mockImplementation(mac => mac === 'bad')
+        feature.reportProbeFailed('x1', 'JBL')
+        feature.reportProbeFailed('x2', 'JBL')
+        feature.logger.logEvent.mockClear()
+
+        feature._onSelectBluetoothDevice(makeEvent(), [
+            { deviceId: 'anon', deviceName: 'Unknown or Unsupported Device (anon)' },
+            { deviceId: 'bad', deviceName: 'Volt' },
+            { deviceId: 'x3', deviceName: 'JBL' },
+        ], jest.fn())
+
+        expect(skipEvents()).toEqual([
+            { message: 'skipping device', deviceId: 'anon', reason: 'no-name' },
+            { message: 'skipping device', deviceId: 'bad', reason: 'blacklisted' },
+            { message: 'skipping device', deviceId: 'x3', reason: 'name-blocked' },
+        ])
+    })
+
+    test('logs a device only once per scan, and again after a new scan', () => {
+        const list = [{ deviceId: 'anon', deviceName: '' }]
+        feature._onSelectBluetoothDevice(makeEvent(), list, jest.fn())
+        feature._onSelectBluetoothDevice(makeEvent(), list, jest.fn())
+        expect(skipEvents()).toHaveLength(1)
+
+        feature._triggerScanIteration = jest.fn()
+        feature.startScan([], true)
+        feature._onSelectBluetoothDevice(makeEvent(), list, jest.fn())
+        expect(skipEvents()).toHaveLength(2)
+    })
+
+    test('does not log candidates or devices that were already approved', () => {
+        feature._onSelectBluetoothDevice(makeEvent(), [{ deviceId: 'aa', deviceName: 'Volt' }], jest.fn())   // approved
+        feature._onSelectBluetoothDevice(makeEvent(), [{ deviceId: 'aa', deviceName: 'Volt' }], jest.fn())   // already approved
+        expect(skipEvents()).toHaveLength(0)
+    })
+})
+
+// ── setKnownDeviceNames ──────────────────────────────────────────────────────────
+
+describe('WebBleFeature — setKnownDeviceNames', () => {
+
+    const known = require('./known-device-names')
+    let feature
+
+    beforeEach(() => {
+        feature = new WebBleFeature()
+        feature.logger.logEvent = jest.fn()
+    })
+
+    test('takes the list over and has the block list cleaned against it', () => {
+        const list = { version: 3, names: ['kickr', 'hrm*'] }
+
+        feature.setKnownDeviceNames(list)
+
+        expect(known.setKnownDeviceNames).toHaveBeenCalledWith(list)
+        expect(feature.deviceCache.applyKnownNames).toHaveBeenCalledTimes(1)
+        expect(feature.logger.logEvent).toHaveBeenCalledWith(expect.objectContaining({ message: 'known device names set', version: 3, count: 2, cleaned: true }))
+    })
+
+    test('a list that is refused is logged and cleans nothing', () => {
+        feature.setKnownDeviceNames({ version: 0, names: [] })
+
+        expect(feature.deviceCache.applyKnownNames).not.toHaveBeenCalled()
+        expect(feature.logger.logEvent).toHaveBeenCalledWith(expect.objectContaining({ message: 'known device names rejected' }))
+    })
+
+    test('nothing breaks without a list', () => {
+        expect(() => feature.setKnownDeviceNames(undefined)).not.toThrow()
+        expect(feature.deviceCache.applyKnownNames).not.toHaveBeenCalled()
+    })
+
+    test('is wired to IPC (webble-known-names) and offered to the renderer', () => {
+        feature.register({})
+        expect(ipcHandleNoResponse).toHaveBeenCalledWith('webble-known-names', expect.any(Function), expect.anything())
+
+        const spec = { registerFeatures: jest.fn() }
+        feature.registerRenderer(spec, { send: jest.fn(), on: jest.fn(), removeAllListeners: jest.fn() })
+        expect(typeof spec.webble.setKnownDeviceNames).toBe('function')
+    })
+})
+
 // ── reportConnectSucceeded ───────────────────────────────────────────────────────
 
 describe('WebBleFeature — reportConnectSucceeded', () => {
@@ -450,6 +709,26 @@ describe('WebBleFeature — _onSelectBluetoothDevice', () => {
         expect(cb).not.toHaveBeenCalled()
         expect(feature.pendingCallback).toBe(cb)
         expect(feature.deviceMacsByName.size).toBe(0)
+    })
+
+    test.each([
+        ['de', 'Unbekanntes oder nicht unterstütztes Gerät'],
+        ['nl', 'Onbekend of niet-ondersteund apparaat'],
+        ['pl', 'Nieznane lub nieobsługiwane urządzenie'],
+    ])('scanning: never approves localized (%s) Chromium placeholders', (_lang, text) => {
+        feature.scanning = true
+        const cb = jest.fn()
+        const deviceId = '52:7F:3B:3C:DE:AB'
+        feature._onSelectBluetoothDevice(makeEvent(), [{ deviceId, deviceName: `${text} (${deviceId})` }], cb)
+        expect(cb).not.toHaveBeenCalled()
+        expect(feature.pendingCallback).toBe(cb)
+    })
+
+    test('scanning: still approves a device whose real name merely contains parentheses', () => {
+        feature.scanning = true
+        const cb = jest.fn()
+        feature._onSelectBluetoothDevice(makeEvent(), [{ deviceId: 'AA:BB', deviceName: 'Tacx Flux (2)' }], cb)
+        expect(cb).toHaveBeenCalledWith('AA:BB')
     })
 
     test('logs select-bluetooth-device only when the device list changes', () => {
@@ -801,7 +1080,7 @@ describe('WebBleFeature — registerRenderer (platform gating)', () => {
             const spec = { registerFeatures: jest.fn() }
             const feature = WebBleFeature.getInstance()
             feature.registerRenderer(spec, { send: jest.fn(), on: jest.fn(), removeAllListeners: jest.fn() })
-            expect(spec.registerFeatures).toHaveBeenCalledWith(['webble', 'webble-services'])
+            expect(spec.registerFeatures).toHaveBeenCalledWith(['webble', 'webble-services', 'webble-known-names'])
         })
     })
 
@@ -878,7 +1157,7 @@ describe('WebBleFeature — registerRenderer', () => {
     test('announces webble capabilities', () => {
         const feature = WebBleFeature.getInstance()
         feature.registerRenderer(spec, ipcRenderer)
-        expect(spec.registerFeatures).toHaveBeenCalledWith(['webble', 'webble-services'])
+        expect(spec.registerFeatures).toHaveBeenCalledWith(['webble', 'webble-services', 'webble-known-names'])
     })
 
     test('startScanning sends webble-start-scan IPC', () => {

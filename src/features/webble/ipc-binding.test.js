@@ -64,6 +64,7 @@ const makeApi = (overrides = {}) => ({
     reportProbeFailed: jest.fn(),
     reportConnectSucceeded: jest.fn(),
     reportUnsupportedDevice: jest.fn(),
+    setKnownDeviceNames: jest.fn(),
     log: jest.fn(),
     ...overrides,
 })
@@ -141,6 +142,36 @@ describe('WebBleIpcBinding — state', () => {
         delete global.window
     })
 
+})
+
+// ── setKnownDeviceNames ───────────────────────────────────────────────────────
+
+describe('WebBleIpcBinding — setKnownDeviceNames', () => {
+
+    let binding
+    let api
+
+    beforeEach(() => {
+        binding = new WebBleIpcBinding()
+        api = makeApi()
+        binding.setApi(api)
+    })
+
+    test('hands the list on to the main process', () => {
+        const list = { version: 3, names: ['kickr', 'hrm*'] }
+        binding.setKnownDeviceNames(list)
+        expect(api.setKnownDeviceNames).toHaveBeenCalledWith(list)
+    })
+
+    test.each([undefined, null, {}, { version: 1 }, { version: 1, names: 'kickr' }])('ignores an invalid list: %j', (list) => {
+        binding.setKnownDeviceNames(list)
+        expect(api.setKnownDeviceNames).not.toHaveBeenCalled()
+    })
+
+    test('copes with a main process that does not offer it (older shell)', () => {
+        delete api.setKnownDeviceNames
+        expect(() => binding.setKnownDeviceNames({ version: 1, names: ['kickr'] })).not.toThrow()
+    })
 })
 
 // ── setSupportedServices ──────────────────────────────────────────────────────
@@ -640,7 +671,7 @@ describe('WebBleIpcBinding — _processDiscoveredDevice', () => {
         expect(discovered[0].advertisement.serviceUuids).not.toContain('180d')
     })
 
-    test('probe failure: retries within the same probe (via _gattConnect) before giving up', async () => {
+    test('probe failure: a probe makes a single attempt, so it cannot hold up the other devices in the list', async () => {
         const device = makeBleDevice('dev-1', 'KICKR CORE')
         device.gatt.connect
             .mockRejectedValueOnce(new Error('flaky'))
@@ -651,9 +682,25 @@ describe('WebBleIpcBinding — _processDiscoveredDevice', () => {
 
         await binding._processDiscoveredDevice(device, true)
 
+        expect(device.gatt.connect).toHaveBeenCalledTimes(1)
+        expect(discovered).toHaveLength(0)
+        expect(api.reportProbeFailed).toHaveBeenCalledTimes(1)
+    })
+
+    test('probe failure: the device is probed again on its next encounter (after the others had their turn)', async () => {
+        const device = makeBleDevice('dev-1', 'KICKR CORE')
+        device.gatt.connect
+            .mockRejectedValueOnce(new Error('flaky'))
+            .mockResolvedValueOnce(makeGattServer(['1826']))
+
+        const discovered = []
+        binding.on('discover', p => discovered.push(p))
+
+        await binding._processDiscoveredDevice(device, true)
+        await binding._processDiscoveredDevice(device, true)
+
         expect(device.gatt.connect).toHaveBeenCalledTimes(2)
         expect(discovered).toHaveLength(1)
-        expect(discovered[0].advertisement.serviceUuids).toEqual(['1826'])
     })
 
     test('probe failure: emits nothing and stays retryable — succeeds on next encounter', async () => {

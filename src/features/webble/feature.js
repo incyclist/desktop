@@ -3,6 +3,7 @@ const { ipcHandleNoResponse, ipcHandleSync, ipcCallSync, ipcCallNoResponse } = r
 const Feature = require('../base')
 const WebBleIpcBinding = require('./ipc-binding')
 const WebBleDeviceCache = require('./device-cache')
+const { isKnownDeviceName, setKnownDeviceNames, getKnownNamesVersion } = require('./known-device-names')
 const { EventLogger } = require('gd-eventlog')
 
 const CONNECT_TARGET_TIMEOUT = 30 * 1000
@@ -12,6 +13,14 @@ const CONNECT_TARGET_TIMEOUT = 30 * 1000
 // nearby non-fitness BLE device that will never connect). Devices we've explicitly
 // asked to connect to (connectTargetMacs) are exempt — see _inCooldown().
 const PROBE_FAILURE_COOLDOWN = 60 * 1000
+
+// Some devices (e.g. speakers, earbuds) advertise under a rotating random address, so every few seconds
+// they show up as a "new" device with the same name and the per-address cooldown never applies. A name is
+// therefore also skipped once probes under it failed on at least NAME_BLOCK_MIN_MACS different addresses
+// within NAME_FAILURE_WINDOW. Never for a name that has a working device (several real devices can share a
+// name, e.g. two "Volt": one unresponsive trainer must not hide the other), and it expires on its own.
+const NAME_BLOCK_MIN_MACS = 2
+const NAME_FAILURE_WINDOW = 5 * 60 * 1000
 
 // linux has no native BLE binding, so WebBLE is its only option. win32 has WinrtBindings
 // as the default and stable path — WebBLE is announced there too so web-ui can opt
@@ -36,6 +45,7 @@ class WebBleFeature extends Feature {
         this.pendingCallback = null          // parked select-bluetooth-device callback
         this.lastDeviceList = []             // device list of the most recent event
         this.discoveredDeviceIds = new Set() // MACs approved in the current scan
+        this.skipLoggedIds = new Set()       // MACs whose skip reason was logged in the current scan
 
         // deviceName → Set<MAC>. Device names are NOT unique (e.g. two "Zwift Click"
         // controllers), so a name can map to several MACs.
@@ -56,6 +66,8 @@ class WebBleFeature extends Feature {
         // expense of other devices. Also not reset by startScan() — that reset is
         // exactly what let a persistently-failing device win every fresh scan cycle.
         this.probeCooldowns = new Map()
+        // deviceName → Map<MAC, timestamp of its last failed probe>, see NAME_BLOCK_MIN_MACS
+        this.nameFailures = new Map()
 
         this._scanLoopTimeout = null
         this._iterationInFlight = false
@@ -101,6 +113,74 @@ class WebBleFeature extends Feature {
         return true
     }
 
+    /** Addresses under which probes of this name failed recently (older failures expire). */
+    _recentNameFailures(name) {
+        const failures = this.nameFailures.get(name)
+        if (!failures) return []
+        const limit = Date.now() - NAME_FAILURE_WINDOW
+        for (const [mac, ts] of failures) {
+            if (ts < limit) failures.delete(mac)
+        }
+        if (failures.size === 0) this.nameFailures.delete(name)
+        return Array.from(failures.keys())
+    }
+
+    _isWorkingDevice(deviceId) {
+        return this.connectTargetMacs.has(deviceId) || this.deviceCache.isGood(deviceId)
+    }
+
+    /** True if any address seen under this name is a device we use or have connected to successfully. */
+    _nameHasWorkingDevice(name) {
+        const macs = this.deviceMacsByName.get(name)
+        return !!macs && Array.from(macs).some(mac => this._isWorkingDevice(mac))
+    }
+
+    /**
+     * Why a device is skipped by its name (undefined if it is not): its name keeps failing under different
+     * addresses, in this session ('name-blocked') or according to the persisted history ('name-blacklisted').
+     * Devices we use (explicit connect target / known good) and names with a working device are never blocked.
+     */
+    _nameBlockReason(name, deviceId) {
+        // the name of a known trainer or sensor (see known-device-names.json) is never blocked
+        if (!name || isKnownDeviceName(name) || this._isWorkingDevice(deviceId) || this._nameHasWorkingDevice(name)) return undefined
+        if (this._recentNameFailures(name).length >= NAME_BLOCK_MIN_MACS) return 'name-blocked'
+        if (this.deviceCache.isNameBad(name)) return 'name-blacklisted'
+        return undefined
+    }
+
+    _isNameBlocked(name, deviceId) {
+        return this._nameBlockReason(name, deviceId) !== undefined
+    }
+
+    _recordNameFailure(deviceId, name) {
+        if (!name || isKnownDeviceName(name)) return
+        const wasBlocked = this._recentNameFailures(name).length >= NAME_BLOCK_MIN_MACS
+        const failures = this.nameFailures.get(name) ?? new Map()
+        failures.set(deviceId, Date.now())
+        this.nameFailures.set(name, failures)
+
+        const macs = this._recentNameFailures(name).length
+        if (!wasBlocked && macs >= NAME_BLOCK_MIN_MACS && !this._nameHasWorkingDevice(name)) {
+            this.logger.logEvent({ message: 'name cooldown', deviceName: name, macs, cooldownMs: NAME_FAILURE_WINDOW })
+        }
+    }
+
+    /**
+     * Called (via IPC) by the renderer at startup with the list of known trainer and sensor names, which is owned by
+     * incyclist-services (delivered with the UI bundle). The list protects those devices from the failed list, and a
+     * new version cleans the entries that already exist, see WebBleDeviceCache.applyKnownNames().
+     * @param {{version:number, names:string[]}} list
+     */
+    setKnownDeviceNames(list) {
+        const previous = getKnownNamesVersion()
+        if (!setKnownDeviceNames(list)) {
+            this.logger.logEvent({ message: 'known device names rejected', version: list?.version, current: previous })
+            return
+        }
+        const cleaned = this.deviceCache.applyKnownNames()
+        this.logger.logEvent({ message: 'known device names set', version: list.version, count: list.names.length, previous, cleaned })
+    }
+
     /**
      * Relays a log event from the renderer (ipc-binding.js). The renderer can't use
      * gd-eventlog directly for this: it's loaded via the preload's own require() graph,
@@ -127,6 +207,7 @@ class WebBleFeature extends Feature {
         this.probeCooldowns.set(deviceId, Date.now() + PROBE_FAILURE_COOLDOWN)
         this.logger.logEvent({ message: 'probe failed, entering cooldown', deviceId, cooldownMs: PROBE_FAILURE_COOLDOWN })
         this.deviceCache.recordFailure(deviceId, deviceName)
+        this._recordNameFailure(deviceId, deviceName)
     }
 
     /**
@@ -140,6 +221,8 @@ class WebBleFeature extends Feature {
         if (this.connectTargetMacs.has(deviceId)) return
         this.deviceCache.markBad(deviceId, deviceName)
         this.logger.logEvent({ message: 'device confirmed unsupported', deviceId, deviceName })
+        // counts as a failure of this name, same as a failed probe (rotating-address devices often connect once)
+        this._recordNameFailure(deviceId, deviceName)
     }
 
     /**
@@ -151,6 +234,7 @@ class WebBleFeature extends Feature {
     reportConnectSucceeded(deviceId, deviceName) {
         this.connectTargetMacs.add(deviceId)
         this.deviceCache.markGood(deviceId, deviceName)
+        if (deviceName) this.nameFailures.delete(deviceName)
         this.logger.logEvent({ message: 'connect succeeded', deviceId, deviceName })
     }
 
@@ -169,11 +253,16 @@ class WebBleFeature extends Feature {
 
     /**
      * Chromium substitutes "Unknown or Unsupported Device (<MAC>)" for devices
-     * that do not advertise a name. Fitness devices always advertise a name, so
-     * nameless devices are never approved.
+     * that do not advertise a name. The text is localized (e.g. "Unbekanntes oder
+     * nicht unterstütztes Gerät (<MAC>)"), but the "(<deviceId>)" suffix is not, so
+     * that is what identifies the placeholder. Fitness devices always advertise a
+     * name, so nameless devices are never approved.
      */
-    _isUsableName(name) {
-        return !!name && !name.startsWith('Unknown or Unsupported Device')
+    _isUsableName(name, deviceId) {
+        if (!name) return false
+        if (name.startsWith('Unknown or Unsupported Device')) return false
+        if (deviceId && name.endsWith(`(${deviceId})`)) return false
+        return true
     }
 
     _onSelectBluetoothDevice(event, deviceList, callback) {
@@ -207,10 +296,8 @@ class WebBleFeature extends Feature {
         if (this.scanning) {
             // Devices known to never work (persisted, repeated failures) are
             // excluded outright — not even as a last resort.
-            const candidates = deviceList.filter(d =>
-                !this.discoveredDeviceIds.has(d.deviceId) &&
-                this._isUsableName(d.deviceName) &&
-                !this.deviceCache.isBad(d.deviceId))
+            this._logSkippedDevices(deviceList)
+            const candidates = deviceList.filter(d => !this._skipReason(d))
 
             // tier 1: a device we already know we want (this session or a previous
             // one) always wins, regardless of chooser order or cooldown.
@@ -238,11 +325,37 @@ class WebBleFeature extends Feature {
         }
     }
 
+    /**
+     * Why a device in the chooser list is not a candidate (undefined if it is one). Order matters: the first
+     * matching reason is reported.
+     */
+    _skipReason(d) {
+        if (this.discoveredDeviceIds.has(d.deviceId)) return 'already-approved'
+        if (!this._isUsableName(d.deviceName, d.deviceId)) return 'no-name'
+        const nameReason = this._nameBlockReason(d.deviceName, d.deviceId)
+        if (nameReason) return nameReason
+        if (this.deviceCache.isBad(d.deviceId)) return 'blacklisted'
+        return undefined
+    }
+
+    // once per device and scan: the chooser re-fires constantly, and the reason is what is needed to understand
+    // why a device that is in range never gets approved. Only the address is logged (as in select-bluetooth-device)
+    _logSkippedDevices(deviceList) {
+        for (const d of deviceList) {
+            if (this.skipLoggedIds.has(d.deviceId)) continue
+            const reason = this._skipReason(d)
+            if (!reason || reason === 'already-approved') continue
+            this.skipLoggedIds.add(d.deviceId)
+            this.logger.logEvent({ message: 'skipping device', deviceId: d.deviceId, reason })
+        }
+    }
+
     startScan(serviceUUIDs, allowDuplicates) {
         this.logger.logEvent({ message: 'startScan', serviceUUIDs, allowDuplicates })
         this.scanning = true
         this.pendingCallback = null
         this.discoveredDeviceIds = new Set()
+        this.skipLoggedIds = new Set()
         this._lastLoggedDeviceIds = null
         this._triggerScanIteration()
     }
@@ -369,6 +482,7 @@ class WebBleFeature extends Feature {
         ipcHandleNoResponse('webble-probe-failed', this.reportProbeFailed.bind(this), ipcMain)
         ipcHandleNoResponse('webble-connect-succeeded', this.reportConnectSucceeded.bind(this), ipcMain)
         ipcHandleNoResponse('webble-unsupported-device', this.reportUnsupportedDevice.bind(this), ipcMain)
+        ipcHandleNoResponse('webble-known-names', this.setKnownDeviceNames.bind(this), ipcMain)
         ipcHandleNoResponse('webble-log', this.log.bind(this), ipcMain)
     }
 
@@ -404,11 +518,14 @@ class WebBleFeature extends Feature {
         spec.webble.reportProbeFailed = ipcCallNoResponse('webble-probe-failed', ipcRenderer)
         spec.webble.reportConnectSucceeded = ipcCallNoResponse('webble-connect-succeeded', ipcRenderer)
         spec.webble.reportUnsupportedDevice = ipcCallNoResponse('webble-unsupported-device', ipcRenderer)
+        spec.webble.setKnownDeviceNames = ipcCallNoResponse('webble-known-names', ipcRenderer)
         spec.webble.log = ipcCallNoResponse('webble-log', ipcRenderer)
 
         // 'webble-services': binding supports setSupportedServices() (devices lib
         // announces its BLE service list — no desktop release needed for new services)
-        spec.registerFeatures(['webble', 'webble-services'])
+        // 'webble-known-names': binding supports setKnownDeviceNames() (the UI announces the list of known
+        // trainer and sensor names, owned by incyclist-services — no desktop release needed to change it)
+        spec.registerFeatures(['webble', 'webble-services', 'webble-known-names'])
     }
 }
 

@@ -62,6 +62,11 @@ class WebBleIpcBinding extends EventEmitter {
         this._probeTimeoutMs = 10000
         this._gattConnectTimeoutMs = 10000
         this._gattConnectRetries = 3
+        // A probe only finds out what a device offers. A failed probe must not hold up the other devices in the
+        // chooser list (three attempts of up to 10 s each): the device is cooled down and the main process
+        // offers it again only after the others have had their turn. Connects to a device we want (pairing,
+        // reconnect) keep the full number of attempts.
+        this._probeConnectAttempts = 1
         this._gattRetryDelayMs = 500
         this._connectWaitTimeoutMs = 30000
         this._gattReleaseGraceMs = 15000
@@ -132,6 +137,17 @@ class WebBleIpcBinding extends EventEmitter {
         this._knownServiceUUIDs = [...byFullUUID.values()]
         this._optionalServices = [...byFullUUID.keys()]
         this._log({ message: 'supported services set', count: this._optionalServices.length, debug: true })
+    }
+
+    /**
+     * Called by the UI (feature-detected, announced as 'webble-known-names') with the list of known trainer and
+     * sensor names, `{ version, names }`, owned by incyclist-services. Handed on to the main process, which decides
+     * which devices may be put on the failed list.
+     */
+    setKnownDeviceNames(list) {
+        if (!list || !Array.isArray(list.names)) return
+        this.getApi()?.setKnownDeviceNames?.(list)
+        this._log({ message: 'known device names announced', version: list.version, count: list.names.length, debug: true })
     }
 
     on(event, callback) {
@@ -335,11 +351,9 @@ class WebBleIpcBinding extends EventEmitter {
     async _probeServices(device) {
         this._log({ message: 'GATT connecting to', device: device.name, debug: true })
         try {
-            // reuses the same retry-with-backoff helper the real pairing connect uses
-            // (_gattConnectRetries attempts) — a one-off GATT hiccup during discovery
-            // shouldn't be treated as a permanent failure any more than it would be
-            // when actually connecting
-            const server = await this._gattConnect(device)
+            // one attempt only, see _probeConnectAttempts. A one-off hiccup is covered by the chooser loop, which
+            // offers the device again once the other candidates have been tried
+            const server = await this._gattConnect(device, this._probeConnectAttempts)
             this._log({ message: 'GATT connected to', device: device.name, debug: true })
 
             const services = await this._withTimeout(this._getServerServices(server), this._probeTimeoutMs, 'service discovery')
@@ -528,17 +542,17 @@ class WebBleIpcBinding extends EventEmitter {
         })
     }
 
-    async _gattConnect(device) {
+    async _gattConnect(device, attempts = this._gattConnectRetries) {
         if (device.gatt.connected) return device.gatt
 
         let lastErr
-        for (let attempt = 1; attempt <= this._gattConnectRetries; attempt++) {
+        for (let attempt = 1; attempt <= attempts; attempt++) {
             try {
                 return await this._withTimeout(device.gatt.connect(), this._gattConnectTimeoutMs, 'GATT connect')
             } catch (err) {
                 lastErr = err
                 this._log({ message: 'GATT connect attempt failed', attempt, device: device.name, error: err?.message })
-                if (attempt < this._gattConnectRetries)
+                if (attempt < attempts)
                     await new Promise(res => setTimeout(res, this._gattRetryDelayMs))
             }
         }

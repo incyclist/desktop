@@ -61,9 +61,11 @@ jobs:
     - name: Check that the tag is on main
       if: ${{ inputs.sign_windows == true }}
       shell: pwsh
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
       run: |
         git merge-base --is-ancestor HEAD origin/main
-        if ($LASTEXITCODE -ne 0) { throw "Tag ${{ inputs.tag }} is not on main" }
+        if ($LASTEXITCODE -ne 0) { throw "Tag $env:RELEASE_TAG is not on main" }
 
     - name: Retrieve the settings and write them to a file
       shell: pwsh

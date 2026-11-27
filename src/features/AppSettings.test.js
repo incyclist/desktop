@@ -289,3 +289,29 @@ describe('AppSettings',()=> {
     })
 
 })
+
+describe('AppSettings - getAppInfo (IPC handler)',()=> {
+    const { ipcMain } = require('electron')
+
+    const getHandler = () => {
+        ipcMain.on.mockClear()
+        AppSettings.register({})
+        const call = ipcMain.on.mock.calls.find( c=>c[0]==='appSettings-getAppInfo')
+        return call[1]
+    }
+
+    let logSpy
+    beforeEach( ()=> { logSpy = jest.spyOn(console,'log').mockImplementation(()=>{}) })
+    afterEach( ()=> { logSpy.mockRestore() })
+
+    test('reports the original error and answers with null if the app info is not available yet',()=> {
+        // the electron mock has no app.incyclistApp
+        const handler = getHandler()
+        const event = {}
+
+        handler(event)
+
+        expect(logSpy).toHaveBeenCalledWith('~~~~ ERROR ', expect.any(TypeError))
+        expect(event.returnValue).toBeNull()
+    })
+})

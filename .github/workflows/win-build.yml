@@ -1,24 +1,27 @@
-# This workflow will do a clean install of node dependencies, build the source code and run tests across different versions of node
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-nodejs-with-github-actions
-
 name: Windows x64 Build
 
+# Signed release builds are started by the maintainer's release script on the signing host,
+# which opens a short signing session and then dispatches this workflow with sign_windows=true.
+# Without sign_windows the workflow builds an unsigned installer from the selected branch.
+
 on:
-  release:
-    types: [created]
   workflow_dispatch:
     inputs:
       sign_windows:
-        description: 'Sign via SSL.com eSigner (billable). Only allowed on main and only for repository admins'
+        description: 'Sign via the YubiKey signing host. Only on main, only for repository admins, and only while a signing session is open'
         type: boolean
         default: false
+      tag:
+        description: 'Release tag to build (required when signing; must be on main)'
+        type: string
+        default: ''
 
 jobs:
   build:
 
     runs-on: windows-2022
 
-    # The signing secrets live in this environment, which only the main branch may use.
+    # The signer secrets live in this environment, which only the main branch may use.
     # Without signing, no environment is attached and the job runs as before.
     environment: ${{ inputs.sign_windows == true && 'windows-signing' || '' }}
 
@@ -33,61 +36,69 @@ jobs:
       shell: pwsh
       env:
         GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG: ${{ inputs.tag }}
       run: |
-        # Signing is billable: only main, and only repository admins
         if ($env:GITHUB_REF -ne 'refs/heads/main') {
           throw "Signing is only allowed on main (this run is on $env:GITHUB_REF)"
         }
-        $permission = gh api "repos/$env:GITHUB_REPOSITORY/collaborators/$env:GITHUB_ACTOR/permission" --jq .permission
-        if ($permission -ne 'admin') {
-          throw "Signing is only allowed for repository admins ($env:GITHUB_ACTOR has permission '$permission')"
+        if ([string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+          throw "Signing needs the release tag (input 'tag')"
+        }
+        # Both the user who started the workflow and the one who (re-)ran it must be admins
+        foreach ($user in @($env:GITHUB_ACTOR, $env:GITHUB_TRIGGERING_ACTOR) | Select-Object -Unique) {
+          $permission = gh api "repos/$env:GITHUB_REPOSITORY/collaborators/$user/permission" --jq .permission
+          if ($permission -ne 'admin') {
+            throw "Signing is only allowed for repository admins ($user has permission '$permission')"
+          }
         }
 
     - name: Checkout
       uses: actions/checkout@v7
+      with:
+        ref: ${{ inputs.sign_windows == true && format('refs/tags/{0}', inputs.tag) || '' }}
+        fetch-depth: ${{ inputs.sign_windows == true && '0' || '1' }}
+
+    - name: Check that the tag is on main
+      if: ${{ inputs.sign_windows == true }}
+      shell: pwsh
+      run: |
+        git merge-base --is-ancestor HEAD origin/main
+        if ($LASTEXITCODE -ne 0) { throw "Tag ${{ inputs.tag }} is not on main" }
 
     - name: Retrieve the settings and write them to a file
-      shell: pwsh    
+      shell: pwsh
       env:
         SETTINGS_FILE: ${{ secrets.SETTINGS_FILE }}
       run: |
         $env:SETTINGS_FILE | Out-File .\config\settings.json
         dir .\config
 
-    - name: Check signing credentials
+    - name: Prepare the signer connection
       if: ${{ inputs.sign_windows == true }}
       shell: pwsh
       env:
-        SSL_COM_USERNAME: ${{ secrets.SSL_COM_USERNAME }}
-        SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
-        SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
-        SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
+        SIGNER_HOST: ${{ secrets.SIGNER_HOST }}
+        SIGNER_PORT: ${{ secrets.SIGNER_PORT }}
+        SIGNER_USER: ${{ secrets.SIGNER_USER }}
+        SIGNER_SSH_KEY: ${{ secrets.SIGNER_SSH_KEY }}
+        SIGNER_KNOWN_HOSTS: ${{ secrets.SIGNER_KNOWN_HOSTS }}
       run: |
-        # Fail before spending build time or signings if a secret is missing
-        foreach ($name in 'SSL_COM_USERNAME','SSL_COM_PASSWORD','SSL_COM_CREDENTIAL_ID','SSL_COM_TOTP_SECRET') {
+        # Fail before spending build time if a secret is missing
+        foreach ($name in 'SIGNER_HOST','SIGNER_PORT','SIGNER_USER','SIGNER_SSH_KEY','SIGNER_KNOWN_HOSTS') {
           if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
             throw "$name secret is empty - cannot sign"
           }
         }
-
-    - name: Set up Java (for CodeSignTool)
-      if: ${{ inputs.sign_windows == true }}
-      uses: actions/setup-java@v5
-      with:
-        distribution: temurin
-        java-version: '21'
-
-    - name: Download CodeSignTool
-      if: ${{ inputs.sign_windows == true }}
-      shell: pwsh
-      run: |
-        $version = 'v1.3.2'
-        $url = "https://github.com/SSLcom/CodeSignTool/releases/download/$version/CodeSignTool-$version-windows.zip"
-        Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\codesigntool.zip"
-        Expand-Archive -Path "$env:RUNNER_TEMP\codesigntool.zip" -DestinationPath "$env:RUNNER_TEMP\codesigntool"
-        $jar = Get-ChildItem -Path "$env:RUNNER_TEMP\codesigntool" -Recurse -Filter 'code_sign_tool*.jar' | Select-Object -First 1
-        if (-not $jar) { throw "code_sign_tool jar not found in CodeSignTool $version archive" }
-        "CODE_SIGN_TOOL_JAR=$($jar.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        $dir = Join-Path $env:RUNNER_TEMP 'signer'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $key = Join-Path $dir 'id_ed25519'
+        $known = Join-Path $dir 'known_hosts'
+        # OpenSSH needs LF line endings and refuses keys that others can read
+        [IO.File]::WriteAllText($key, ($env:SIGNER_SSH_KEY.Trim() -replace "`r", '') + "`n")
+        [IO.File]::WriteAllText($known, ($env:SIGNER_KNOWN_HOSTS.Trim() -replace "`r", '') + "`n")
+        icacls $key /inheritance:r /grant:r "$($env:USERNAME):(R)" | Out-Null
+        "SIGNER_KEY_FILE=$key" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        "SIGNER_KNOWN_HOSTS_FILE=$known" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v7
@@ -101,15 +112,20 @@ jobs:
       env:
         RELEASE_SERVER: ${{ secrets.RELEASE_SERVER }}
         SIGN_WINDOWS: ${{ inputs.sign_windows }}
-        SSL_COM_USERNAME: ${{ secrets.SSL_COM_USERNAME }}
-        SSL_COM_PASSWORD: ${{ secrets.SSL_COM_PASSWORD }}
-        SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
-        SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
+        SIGNER_HOST: ${{ secrets.SIGNER_HOST }}
+        SIGNER_PORT: ${{ secrets.SIGNER_PORT }}
+        SIGNER_USER: ${{ secrets.SIGNER_USER }}
+        SIGNER_KNOWN_HOSTS: ${{ env.SIGNER_KNOWN_HOSTS_FILE }}
       run: |
         $env:BUILD_TARGET = "dist"
         npm install
         npm run make
-  
+
+    - name: Remove the signer key
+      if: ${{ always() && inputs.sign_windows == true }}
+      shell: pwsh
+      run: Remove-Item -Recurse -Force (Join-Path $env:RUNNER_TEMP 'signer') -ErrorAction SilentlyContinue
+
     - name: Verify signatures
       if: ${{ inputs.sign_windows == true }}
       shell: pwsh
@@ -143,5 +159,3 @@ jobs:
       with:
         name: package
         path: ./out/make/squirrel.windows/x64/
-
-  

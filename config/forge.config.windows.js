@@ -3,7 +3,7 @@ const fs = require('fs/promises')
 const path = require('path')
 
 // Signing is opt-in: set SIGN_WINDOWS=true (see .github/workflows/win-build.yml).
-// Files are signed through SSL.com eSigner (CodeSignTool); the hook limits which files are sent.
+// Files are sent over SSH to the YubiKey signing host; the hook limits which files are sent.
 const signWindows = process.env.SIGN_WINDOWS === 'true'
 const windowsSign = { hookModulePath: path.resolve(__dirname, '../src/modules/windowsSign.js') }
 

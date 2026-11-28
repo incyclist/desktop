@@ -28,8 +28,9 @@ const getAppInfo = () => {
         const tempDir = os.tmpdir()
         res = {name,version,session, sourceDir,appDir,tempDir}
     }
-    catch {
+    catch (err) {
         console.log('~~~~ ERROR ',err)
+        res = null
     }
     return res
 
